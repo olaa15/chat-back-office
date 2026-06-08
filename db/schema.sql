@@ -331,3 +331,29 @@ create policy "read business receipts" on storage.objects
 alter table public.businesses
   add column vat_rate numeric(5,2) not null default 0
     check (vat_rate >= 0 and vat_rate <= 100);
+
+-- =============================================================
+-- Connect codes — security hardening: short-lived, crypto-random
+-- one-time codes for linking Telegram/WhatsApp to a business
+-- (the live database already has these; recorded here so
+-- schema.sql no longer drifts from it)
+-- =============================================================
+
+alter table public.businesses
+  add column if not exists connect_code text,
+  add column if not exists connect_code_expires_at timestamptz;
+
+-- =============================================================
+-- Conversation state — durable storage for in-flight bot
+-- conversations (replaces an in-memory Map so an "awaiting
+-- confirmation" survives a restart and works across instances).
+-- Each row carries its own expiry so an unanswered confirmation
+-- doesn't linger indefinitely.
+-- =============================================================
+
+create table if not exists public.conversation_state (
+  user_key   text primary key,
+  state      jsonb not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);

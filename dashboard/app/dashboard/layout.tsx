@@ -1,5 +1,7 @@
 import { getServerClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { Logo } from "@/components/brand";
+import Nav from "./Nav";
 import SignOutButton from "./SignOutButton";
 
 export default async function DashboardLayout({
@@ -14,34 +16,45 @@ export default async function DashboardLayout({
 
   if (!user) redirect("/login");
 
+  const initial = (user.email ?? "?").charAt(0).toUpperCase();
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <span className="font-semibold text-gray-900">My Back Office</span>
-            <nav className="flex gap-4 text-sm">
-              <a
-                href="/dashboard"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Overview
-              </a>
-              <a
-                href="/dashboard/invoices"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                Invoices
-              </a>
-            </nav>
+    <div className="min-h-screen lg:grid lg:grid-cols-[260px_1fr]">
+      {/* Sidebar */}
+      <aside className="sticky top-0 hidden h-screen flex-col bg-sidebar px-4 py-5 lg:flex">
+        <div className="px-2 pb-6">
+          <Logo tone="dark" />
+        </div>
+
+        <Nav />
+
+        <div className="mt-auto border-t border-sidebar-line pt-4">
+          <div className="flex items-center gap-3 px-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/20 text-sm font-semibold text-brand">
+              {initial}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-xs text-sidebar-muted">
+              {user.email}
+            </span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">{user.email}</span>
+          <div className="px-1 pt-2">
             <SignOutButton />
           </div>
         </div>
+      </aside>
+
+      {/* Mobile top bar */}
+      <header className="flex items-center justify-between border-b border-line bg-sidebar px-4 py-3 lg:hidden">
+        <Logo tone="dark" />
+        <SignOutButton />
       </header>
-      <main className="max-w-6xl mx-auto px-6 py-8">{children}</main>
+
+      {/* Main */}
+      <div className="flex min-h-screen flex-col">
+        <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:px-8 sm:py-10">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

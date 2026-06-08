@@ -41,11 +41,15 @@ export async function linkTelegramAccount(
   // Look up business by connect code stored on the businesses table
   const { data: business, error } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, connect_code_expires_at")
     .eq("connect_code", code.toUpperCase())
     .single();
 
   if (error || !business) return false;
+
+  // Reject expired or never-set codes
+  const expiresAt = business.connect_code_expires_at as string | null;
+  if (!expiresAt || new Date(expiresAt) < new Date()) return false;
 
   const businessId = business.id as string;
 
@@ -88,11 +92,14 @@ export async function getBusinessForWhatsAppUser(phone: string): Promise<string 
 export async function linkWhatsAppAccount(code: string, phone: string): Promise<boolean> {
   const { data: business, error } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, connect_code_expires_at")
     .eq("connect_code", code.toUpperCase())
     .single();
 
   if (error || !business) return false;
+
+  const expiresAt = business.connect_code_expires_at as string | null;
+  if (!expiresAt || new Date(expiresAt) < new Date()) return false;
 
   const { error: upsertError } = await supabase
     .from("whatsapp_links")

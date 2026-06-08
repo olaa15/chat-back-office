@@ -1,11 +1,64 @@
 "use server";
 
+import crypto from "node:crypto";
 import { adminClient } from "@/lib/supabase-admin";
+import { getServerClient } from "@/lib/supabase-server";
 
-export async function createBusiness(
-  userId: string,
-  data: { name: string; currency: string; address: string; vatRate?: number }
-): Promise<string> {
+// ── Connect-code settings ────────────────────────────────────────────────
+// 32-char alphabet excluding ambiguous 0/O and 1/I. 32^6 ≈ 1.07e9 combinations,
+// short-lived and only meaningful for ~15 minutes, so brute force is infeasible.
+const CONNECT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CONNECT_CODE_LENGTH = 6;
+const CONNECT_CODE_TTL_MINUTES = 15;
+
+/** Resolve the authenticated user from the session cookie, or throw. */
+async function requireUser() {
+  const supabase = await getServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  return { user, supabase };
+}
+
+/**
+ * Assert the current session user is a member of `businessId`, and return their id.
+ * Reads via the user's RLS-backed client, so the membership row is only visible
+ * when they genuinely belong to the business — defence in depth on top of the
+ * explicit user_id filter. Every action that takes a businessId calls this first.
+ */
+async function assertMember(businessId: string): Promise<string> {
+  const { user, supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("business_members")
+    .select("role")
+    .eq("business_id", businessId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !data) throw new Error("Not authorized for this business");
+  return user.id;
+}
+
+function generateConnectCodeString(): string {
+  let code = "";
+  for (let i = 0; i < CONNECT_CODE_LENGTH; i++) {
+    code += CONNECT_CODE_ALPHABET[crypto.randomInt(CONNECT_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+// NOTE: identity now comes from the session — `userId` is no longer a parameter.
+export async function createBusiness(data: {
+  name: string;
+  currency: string;
+  address: string;
+  vatRate?: number;
+}): Promise<string> {
+  const { user } = await requireUser();
+
+  // RLS intentionally has no INSERT policy on businesses/business_members, so
+  // self-service creation uses the admin client — but it can ONLY ever create a
+  // business owned by the current session user, never an arbitrary one.
   const { data: business, error } = await adminClient
     .from("businesses")
     .insert({
@@ -19,11 +72,12 @@ export async function createBusiness(
 
   if (error || !business) throw new Error(`Failed to create business: ${error?.message}`);
 
-  await adminClient.from("business_members").insert({
+  const { error: memberError } = await adminClient.from("business_members").insert({
     business_id: business.id,
-    user_id: userId,
+    user_id: user.id,
     role: "owner",
   });
+  if (memberError) throw new Error(`Failed to link owner: ${memberError.message}`);
 
   return business.id as string;
 }
@@ -37,7 +91,9 @@ export async function updateBusinessProfile(
     logoUrl?: string;
   }
 ): Promise<void> {
-  await adminClient
+  await assertMember(businessId);
+
+  const { error } = await adminClient
     .from("businesses")
     .update({
       bank_name: data.bankName || null,
@@ -46,44 +102,55 @@ export async function updateBusinessProfile(
       logo_url: data.logoUrl || null,
     })
     .eq("id", businessId);
+  if (error) throw new Error(`Failed to update profile: ${error.message}`);
 }
 
 export async function uploadLogo(
   businessId: string,
   formData: FormData
 ): Promise<string | null> {
+  await assertMember(businessId);
+
   const file = formData.get("logo") as File | null;
   if (!file || file.size === 0) return null;
 
-  const ext = file.name.split(".").pop() ?? "png";
+  // Basic upload hardening — constrain type and size before touching storage.
+  const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+  if (!ALLOWED.includes(file.type)) throw new Error("Unsupported logo file type");
+  if (file.size > 2 * 1024 * 1024) throw new Error("Logo must be under 2MB");
+
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
   const path = `${businessId}/logo.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error } = await adminClient.storage
     .from("logos")
     .upload(path, buffer, { contentType: file.type, upsert: true });
-
   if (error) return null;
 
   const { data } = adminClient.storage.from("logos").getPublicUrl(path);
   return data.publicUrl;
 }
 
-export async function generateConnectCode(
-  businessId: string,
-  _userId: string
-): Promise<string> {
-  const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+// NOTE: `userId` removed — derived from the session via assertMember.
+export async function generateConnectCode(businessId: string): Promise<string> {
+  await assertMember(businessId);
 
-  await adminClient
+  const code = generateConnectCodeString();
+  const expiresAt = new Date(Date.now() + CONNECT_CODE_TTL_MINUTES * 60_000).toISOString();
+
+  const { error } = await adminClient
     .from("businesses")
-    .update({ connect_code: code })
+    .update({ connect_code: code, connect_code_expires_at: expiresAt })
     .eq("id", businessId);
+  if (error) throw new Error(`Failed to generate connect code: ${error.message}`);
 
   return code;
 }
 
 export async function checkTelegramLinked(businessId: string): Promise<boolean> {
+  await assertMember(businessId);
+
   const { data } = await adminClient
     .from("telegram_links")
     .select("linked_at")

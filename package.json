@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "test": "ts-node --transpile-only src/llm/eval.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "trigger:dev": "npx trigger.dev@latest dev",

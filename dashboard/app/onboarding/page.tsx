@@ -1,8 +1,8 @@
 "use client";
 
-import { getBrowserClient } from "@/lib/supabase-client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Logo } from "@/components/brand";
 import {
   checkTelegramLinked,
   createBusiness,
@@ -19,6 +19,20 @@ const STAGES = [
   "You're live!",
 ];
 
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="m5 12 4.5 4.5L19 7"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function StageIndicator({ current }: { current: number }) {
   return (
     <div className="flex items-center gap-2 mb-8">
@@ -27,16 +41,18 @@ function StageIndicator({ current }: { current: number }) {
           <div
             className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
               i < current
-                ? "bg-gray-900 text-white"
+                ? "bg-brand text-white"
                 : i === current
-                ? "bg-gray-900 text-white"
-                : "bg-gray-200 text-gray-400"
+                ? "bg-brand text-white"
+                : "bg-line text-ink-faint"
             }`}
           >
-            {i < current ? "✓" : i + 1}
+            {i < current ? <CheckIcon /> : i + 1}
           </div>
           {i < STAGES.length - 1 && (
-            <div className={`h-0.5 w-8 ${i < current ? "bg-gray-900" : "bg-gray-200"}`} />
+            <div
+              className={`h-0.5 w-8 transition-colors ${i < current ? "bg-brand" : "bg-line"}`}
+            />
           )}
         </div>
       ))}
@@ -47,7 +63,6 @@ function StageIndicator({ current }: { current: number }) {
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [userId, setUserId] = useState<string>("");
   const [businessId, setBusinessId] = useState<string>("");
   const [connectCode, setConnectCode] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -55,11 +70,6 @@ export default function OnboardingPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    getBrowserClient()
-      .auth.getUser()
-      .then(({ data }) => {
-        if (data.user) setUserId(data.user.id);
-      });
     // Auto-advance past stage 1 after 1.5s
     const t = setTimeout(() => setStep(1), 1500);
     return () => clearTimeout(t);
@@ -87,7 +97,7 @@ export default function OnboardingPage() {
     const fd = new FormData(e.currentTarget);
     try {
       const vatRateRaw = Number(fd.get("vatRate"));
-      const id = await createBusiness(userId, {
+      const id = await createBusiness({
         name: fd.get("name") as string,
         currency: fd.get("currency") as string,
         address: fd.get("address") as string,
@@ -120,7 +130,7 @@ export default function OnboardingPage() {
         bankAccountNumber: fd.get("bankAccountNumber") as string,
         logoUrl: logoUrl ?? undefined,
       });
-      const code = await generateConnectCode(businessId, userId);
+      const code = await generateConnectCode(businessId);
       setConnectCode(code);
       setStep(3);
     } catch (err) {
@@ -130,36 +140,57 @@ export default function OnboardingPage() {
   }
 
   const inputCls =
-    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent";
-  const labelCls = "block text-sm font-medium text-gray-700 mb-1";
+    "w-full rounded-lg border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink placeholder-ink-faint transition-shadow focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10";
+  const labelCls = "mb-1.5 block text-sm font-medium text-ink";
   const btnCls =
-    "w-full rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 transition-colors";
+    "w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-[0_6px_16px_-8px_rgba(4,120,87,0.7)] transition-colors hover:bg-brand-strong disabled:opacity-50";
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+      <div className="mb-8">
+        <Logo tone="light" />
+      </div>
+
+      <div
+        className="w-full max-w-lg rounded-[var(--radius-card)] border border-line bg-surface p-8"
+        style={{ boxShadow: "var(--shadow-card)" }}
+      >
+        <p className="text-xs font-semibold uppercase tracking-widest text-ink-faint mb-2">
           Set up your business
         </p>
         <StageIndicator current={step} />
 
         {error && (
-          <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{error}</p>
+          <p className="rounded-lg bg-overdue-bg px-3 py-2 text-sm text-overdue-fg mb-4">
+            {error}
+          </p>
         )}
 
         {/* Stage 1 — account created */}
         {step === 0 && (
           <div className="text-center py-6">
-            <div className="text-4xl mb-3">✓</div>
-            <h2 className="text-xl font-bold text-gray-900">Account created!</h2>
-            <p className="text-gray-500 text-sm mt-1">Setting up your workspace…</p>
+            <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-brand/10 text-brand">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="m5 12 4.5 4.5L19 7"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h2 className="font-display text-xl font-semibold text-ink">Account created!</h2>
+            <p className="mt-1 text-sm text-ink-muted">Setting up your workspace…</p>
           </div>
         )}
 
         {/* Stage 2 — business setup */}
         {step === 1 && (
           <form onSubmit={handleBusinessSetup} className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Set up your business</h2>
+            <h2 className="font-display text-xl font-semibold text-ink mb-4">
+              Set up your business
+            </h2>
             <div>
               <label className={labelCls}>Business name</label>
               <input name="name" required className={inputCls} placeholder="Acme Ltd" />
@@ -185,13 +216,18 @@ export default function OnboardingPage() {
                 className={inputCls}
                 placeholder="0"
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="mt-1 text-xs text-ink-faint">
                 Applied by default to invoices you create — you can override it per invoice.
               </p>
             </div>
             <div>
               <label className={labelCls}>Address</label>
-              <input name="address" required className={inputCls} placeholder="London, United Kingdom" />
+              <input
+                name="address"
+                required
+                className={inputCls}
+                placeholder="London, United Kingdom"
+              />
             </div>
             <button type="submit" disabled={loading} className={btnCls}>
               {loading ? "Saving…" : "Continue →"}
@@ -202,10 +238,17 @@ export default function OnboardingPage() {
         {/* Stage 3 — profile */}
         {step === 2 && (
           <form onSubmit={handleProfile} className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Complete your profile</h2>
+            <h2 className="font-display text-xl font-semibold text-ink mb-4">
+              Complete your profile
+            </h2>
             <div>
               <label className={labelCls}>Logo (optional)</label>
-              <input name="logo" type="file" accept="image/*" className="w-full text-sm text-gray-600" />
+              <input
+                name="logo"
+                type="file"
+                accept="image/*"
+                className="w-full text-sm text-ink-muted"
+              />
             </div>
             <div>
               <label className={labelCls}>Bank name</label>
@@ -228,24 +271,26 @@ export default function OnboardingPage() {
         {/* Stage 4 — connect Telegram */}
         {step === 3 && (
           <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Connect Telegram</h2>
-            <p className="text-sm text-gray-500 mb-6">
+            <h2 className="font-display text-xl font-semibold text-ink mb-2">
+              Connect Telegram
+            </h2>
+            <p className="text-sm text-ink-muted mb-6">
               Open Telegram, find your bot, and send this code:
             </p>
-            <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 text-center mb-6">
-              <p className="text-4xl font-mono font-bold tracking-widest text-gray-900">
+            <div className="rounded-xl border border-brand/20 bg-brand-soft p-6 text-center mb-6">
+              <p className="font-mono text-4xl font-bold tracking-widest text-brand-ink">
                 {connectCode}
               </p>
             </div>
-            <p className="text-xs text-gray-400 text-center">
+            <p className="text-xs text-ink-faint text-center">
               Waiting for you to send the code in Telegram…
             </p>
             <div className="mt-4 flex justify-center">
-              <div className="flex gap-1">
+              <div className="flex gap-1.5">
                 {[0, 1, 2].map((i) => (
                   <div
                     key={i}
-                    className="w-2 h-2 rounded-full bg-gray-300 animate-bounce"
+                    className="w-2 h-2 rounded-full bg-brand animate-bounce"
                     style={{ animationDelay: `${i * 0.15}s` }}
                   />
                 ))}
@@ -257,15 +302,24 @@ export default function OnboardingPage() {
         {/* Stage 5 — live */}
         {step === 4 && (
           <div className="text-center py-6">
-            <div className="text-5xl mb-4">🎉</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">You&apos;re live!</h2>
-            <p className="text-gray-500 text-sm mb-6">
+            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-brand/10 text-brand">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="m5 12 4.5 4.5L19 7"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h2 className="font-display text-2xl font-semibold text-ink mb-2">
+              You&apos;re live!
+            </h2>
+            <p className="text-sm text-ink-muted mb-6">
               Your bot is connected and ready. Open Telegram and send your first invoice request.
             </p>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className={btnCls}
-            >
+            <button onClick={() => router.push("/dashboard")} className={btnCls}>
               Go to dashboard →
             </button>
           </div>

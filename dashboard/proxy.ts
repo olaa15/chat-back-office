@@ -1,3 +1,6 @@
+// This Next.js version (16.x) renamed the `middleware` file convention to
+// `proxy` — middleware.ts still runs but logs a deprecation warning. The file
+// must be named proxy.ts and export a function named (or default-exported) `proxy`.
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 

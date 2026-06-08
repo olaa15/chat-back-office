@@ -2,6 +2,7 @@
 
 import { getBrowserClient } from "@/lib/supabase-client";
 import { useRouter } from "next/navigation";
+import { LogoutIcon } from "@/components/icons";
 
 export default function SignOutButton() {
   const router = useRouter();
@@ -16,8 +17,9 @@ export default function SignOutButton() {
   return (
     <button
       onClick={handleSignOut}
-      className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-sidebar-muted transition-colors hover:bg-white/5 hover:text-white"
     >
+      <LogoutIcon size={16} />
       Sign out
     </button>
   );

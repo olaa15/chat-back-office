@@ -20,9 +20,9 @@ import {
 import { createCheckoutSession } from "../payments/stripe";
 import { computeInvoiceTotals, InvoiceTotals } from "../invoices/calc";
 import { generateInvoicePdf } from "../invoices/generate";
-import { extractExpenseFromImage, extractIntent } from "../llm/extract";
+import { extractExpenseFromImage, extractIntent, IntentResult } from "../llm/extract";
 import { ExpenseFields, InvoiceFields, PaymentFields } from "../llm/tools";
-import { getState, resetState, setState } from "./state";
+import { claimState, getState, resetState, setState } from "./state";
 import { BotChannel } from "./channel";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -200,13 +200,18 @@ export async function handleReceiptImage(
     return;
   }
 
-  setState(userId, { stage: "awaiting_expense_confirmation", expense, imageBuffer, mimeType });
+  await setState(userId, {
+    stage: "awaiting_expense_confirmation",
+    expense,
+    imageBufferB64: imageBuffer.toString("base64"),
+    mimeType,
+  });
   await channel.sendText(formatExpenseConfirmation(expense));
 }
 
 export async function handleBotMessage(channel: BotChannel, text: string, channelType: "telegram" | "whatsapp" = "telegram"): Promise<void> {
   const userId = channel.userId;
-  const current = getState(userId);
+  const current = await getState(userId);
 
   // ── Confirmation stages ──────────────────────────────────────────────────
   if (
@@ -215,12 +220,15 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
     current.stage === "awaiting_expense_confirmation"
   ) {
     const isYes = /^yes$/i.test(text) || /^confirm$/i.test(text);
-
     if (!isYes) {
-      resetState(userId);
+      await resetState(userId);
       await channel.sendText("No problem. Send me a new request whenever you're ready.");
       return;
     }
+
+    // Atomically take the pending action — a duplicate "yes" finds nothing.
+    const claimed = await claimState(userId);
+    if (claimed.stage === "idle") return; // already handled
 
     const businessId = channelType === "whatsapp"
       ? await getBusinessForWhatsAppUser(userId)
@@ -231,19 +239,14 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
       return;
     }
 
-    if (current.stage === "awaiting_confirmation") {
-      const { fields, totals } = current;
-      resetState(userId);
-      await handleInvoiceConfirmation(channel, fields, totals, businessId);
-    } else if (current.stage === "awaiting_payment_confirmation") {
-      const { payment, invoiceId } = current;
-      const invoice = await findInvoiceByNumber(businessId, payment.invoice_number);
-      resetState(userId);
-      await handlePaymentConfirmation(channel, payment, invoiceId, invoice?.total ?? payment.amount, businessId);
+    if (claimed.stage === "awaiting_confirmation") {
+      await handleInvoiceConfirmation(channel, claimed.fields, claimed.totals, businessId);
+    } else if (claimed.stage === "awaiting_payment_confirmation") {
+      const invoice = await findInvoiceByNumber(businessId, claimed.payment.invoice_number);
+      await handlePaymentConfirmation(channel, claimed.payment, claimed.invoiceId, invoice?.total ?? claimed.payment.amount, businessId);
     } else {
-      const { expense, imageBuffer, mimeType } = current;
-      resetState(userId);
-      await handleExpenseConfirmation(channel, expense, imageBuffer, mimeType, businessId);
+      const imageBuffer = Buffer.from(claimed.imageBufferB64, "base64");
+      await handleExpenseConfirmation(channel, claimed.expense, imageBuffer, claimed.mimeType, businessId);
     }
     return;
   }
@@ -271,7 +274,14 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
   const business = businessId ? await getBusinessById(businessId) : null;
 
   await channel.sendTyping();
-  const result = await extractIntent(text, anthropic, business?.currency ?? "GBP");
+  let result: IntentResult;
+  try {
+    result = await extractIntent(text, anthropic, business?.currency ?? "GBP");
+  } catch (err) {
+    console.error("extractIntent failed:", err);
+    await channel.sendText("Sorry — something went wrong on my side. Please try again in a moment.");
+    return;
+  }
 
   switch (result.intent) {
     case "question":
@@ -285,7 +295,7 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
         return;
       }
       const totals = computeInvoiceTotals(data.amount, data.vat_rate ?? business?.vat_rate ?? 0);
-      setState(userId, { stage: "awaiting_confirmation", fields: data, totals });
+      await setState(userId, { stage: "awaiting_confirmation", fields: data, totals });
       await channel.sendText(formatConfirmation(data, totals));
       break;
     }
@@ -305,7 +315,7 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
         await channel.sendText(`I couldn't find invoice ${data.invoice_number}. Please check the number and try again.`);
         return;
       }
-      setState(userId, { stage: "awaiting_payment_confirmation", payment: data, invoiceId: invoice.id });
+      await setState(userId, { stage: "awaiting_payment_confirmation", payment: data, invoiceId: invoice.id });
       await channel.sendText(formatPaymentConfirmation(data));
       break;
     }
