@@ -21,7 +21,6 @@ const {
 } = process.env;
 
 if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN is required");
-if (!WEBHOOK_URL) throw new Error("WEBHOOK_URL is required");
 if (!TELEGRAM_WEBHOOK_SECRET) throw new Error("TELEGRAM_WEBHOOK_SECRET is required");
 
 const bot = createBot(TELEGRAM_BOT_TOKEN);
@@ -148,10 +147,13 @@ app.post("/whatsapp-webhook", (req: Request & { rawBody?: Buffer }, res) => {
 });
 
 app.listen(Number(PORT), async () => {
-  // Register the same secret token Telegram will echo back on each update.
-  await bot.api.setWebhook(`${WEBHOOK_URL}/webhook`, {
-    secret_token: TELEGRAM_WEBHOOK_SECRET,
-  });
   console.log(`Bot running on port ${PORT}`);
-  console.log(`Webhook registered at ${WEBHOOK_URL}/webhook`);
+  if (WEBHOOK_URL) {
+    await bot.api.setWebhook(`${WEBHOOK_URL}/webhook`, {
+      secret_token: TELEGRAM_WEBHOOK_SECRET,
+    });
+    console.log(`Webhook registered at ${WEBHOOK_URL}/webhook`);
+  } else {
+    console.warn("WEBHOOK_URL not set — Telegram webhook not registered. Set it and redeploy.");
+  }
 });
