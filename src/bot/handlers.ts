@@ -263,8 +263,12 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
       await channel.sendText(
         "Your account is now linked to your business! You're ready to go.\n\nTry: \"Generate an invoice for ABC Company for £500 consulting services\""
       );
-      return;
+    } else {
+      await channel.sendText(
+        "That code didn't work — it may have expired (codes last 15 minutes) or been entered incorrectly.\n\nGo back to the dashboard and click Continue to get a fresh code."
+      );
     }
+    return;
   }
 
   const businessId = channelType === "whatsapp"
