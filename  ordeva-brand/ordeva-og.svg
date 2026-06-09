@@ -1,0 +1,11 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+<rect width="1200" height="630" fill="#faf9f6"/>
+<g transform="translate(372,250)">
+<rect x="0" y="0" width="96" height="96" rx="28" fill="#047857"/>
+<g stroke="#faf9f6" stroke-width="8" stroke-linecap="round">
+<line x1="26" y1="38" x2="72" y2="38"/><line x1="26" y1="50" x2="60" y2="50"/><line x1="26" y1="62" x2="48" y2="62"/>
+</g>
+<text x="124" y="72" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="700" letter-spacing="-1.5" fill="#18171c">Ordeva</text>
+</g>
+<text x="600" y="430" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="30" fill="#5b5a55">Run your business from chat — invoices, payments, records.</text>
+</svg>

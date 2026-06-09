@@ -55,7 +55,7 @@ export default function LoginPage() {
           </p>
         </div>
         <div className="relative text-xs text-sidebar-muted">
-          © {new Date().getFullYear()} Ordeva
+          © {new Date().getFullYear()} Back Office
         </div>
       </div>
 

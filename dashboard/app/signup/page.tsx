@@ -73,7 +73,7 @@ export default function SignupPage() {
           </ul>
         </div>
         <div className="relative text-xs text-sidebar-muted">
-          © {new Date().getFullYear()} Back Office
+          © {new Date().getFullYear()} Ordeva
         </div>
       </div>
 

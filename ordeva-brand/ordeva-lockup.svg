@@ -1,0 +1,9 @@
+<svg width="188" height="56" viewBox="0 0 188 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ordeva" style="color:#18171c">
+  <rect x="4" y="6" width="44" height="44" rx="13" fill="#047857"/>
+  <g stroke="#faf9f6" stroke-width="3.8" stroke-linecap="round">
+    <line x1="15" y1="23" x2="33" y2="23"/>
+    <line x1="15" y1="28" x2="28" y2="28"/>
+    <line x1="15" y1="33" x2="23" y2="33"/>
+  </g>
+  <text x="62" y="37" font-family="Fraunces, Georgia, 'Times New Roman', serif" font-size="31" font-weight="600" letter-spacing="-0.5" fill="currentColor">Ordeva</text>
+</svg>

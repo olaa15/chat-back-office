@@ -21,15 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ordeva.co.uk"),
-  title: { default: "Ordeva", template: "%s · Ordeva" },
+  title: "Back Office",
   description: "Run your business from chat — invoices, payments, and records.",
-  openGraph: {
-    title: "Ordeva",
-    description: "Run your business from chat — invoices, payments, and records.",
-    images: ["/ordeva-og.png"],
-    type: "website",
-  },
 };
 
 export default function RootLayout({

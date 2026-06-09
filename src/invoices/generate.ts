@@ -19,7 +19,7 @@ export async function generateInvoicePdf(
       ? new Date(fields.due_date).toLocaleDateString("en-GB", { dateStyle: "long" })
       : "On receipt",
     business: {
-      name: business?.name ?? "My Back Office",
+      name: business?.name ?? "My Business",
       address: business?.address ?? "London, United Kingdom",
       email: business?.email ?? "",
       logoUrl: business?.logo_url ?? undefined,
