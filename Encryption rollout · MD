@@ -1,0 +1,83 @@
+# Ordeva — encrypt the bank account number (Claude Code prompt)
+
+Add application-layer AES-256-GCM encryption for `businesses.bank_account_number`.
+The helper is provided at `ordeva-security/crypto.ts` (repo root, after you drop the folder in).
+
+**Hard rules**
+- Server-only. Never import `crypto.ts` into a client component.
+- No new dependencies — it uses built-in `node:crypto`.
+- The column stays `text`; no schema migration is required.
+- Run in plan mode first; show me the plan and diff.
+
+## Context (so you wire the right spots)
+- `bank_account_number` is **written** in `dashboard/app/onboarding/actions.ts` →
+  `updateBusinessProfile()`.
+- It is currently **read nowhere** — invoices don't use it and the onboarding form
+  doesn't prefill it. So this change is encrypt-on-write only; the decrypt helper is
+  for the future read path.
+
+## Steps
+
+1. Add the helper: place `ordeva-security/crypto.ts` at `dashboard/lib/crypto.ts`
+   (so it resolves as `@/lib/crypto`).
+
+2. Encrypt on write — `dashboard/app/onboarding/actions.ts`:
+   - Add the import near the top:
+     ```ts
+     import { encryptField } from "@/lib/crypto";
+     ```
+   - In `updateBusinessProfile`, change the bank line:
+     ```ts
+     // from:
+     bank_account_number: data.bankAccountNumber || null,
+     // to:
+     bank_account_number: data.bankAccountNumber ? encryptField(data.bankAccountNumber) : null,
+     ```
+   - Leave `bank_name` and `bank_account_name` as-is (not sensitive in the same way).
+
+3. Document the key — add to `.env.example`:
+   ```
+   # 32-byte key (base64) for encrypting sensitive fields like bank account numbers.
+   # Generate with: openssl rand -base64 32
+   # Keep it secret and stable — losing it makes existing encrypted values unrecoverable.
+   BANK_FIELD_KEY=
+   ```
+
+## After applying (you, not Claude Code)
+- Generate a key: `openssl rand -base64 32`
+- Set `BANK_FIELD_KEY` in `dashboard/.env.local` **and** in your Vercel project env
+  (same value in both). Treat it like a password; never commit the real value.
+
+## Future read path (note for later — no action now)
+When you surface the number (a "pay by bank transfer" line on the invoice, or a settings
+screen that prefills it), select `bank_account_number` and pass it through `decryptField()`
+from `@/lib/crypto` before displaying. If the bot side (`src/`) ever needs it, copy the same
+helper into `src/` and set the **same** `BANK_FIELD_KEY` in the bot's environment.
+
+## Optional — backfill existing plaintext rows
+Only needed if you already saved real bank numbers before this change. `decryptField`
+passes legacy plaintext through safely, so nothing breaks meanwhile. To re-encrypt, run a
+one-off script with the service-role key set in env:
+```js
+// backfill.mjs — run once:  node backfill.mjs
+import { createClient } from "@supabase/supabase-js";
+import { encryptField, isEncrypted } from "./dashboard/lib/crypto.js"; // or inline the helper
+const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const { data } = await db.from("businesses").select("id, bank_account_number");
+for (const b of data ?? []) {
+  if (b.bank_account_number && !isEncrypted(b.bank_account_number)) {
+    await db.from("businesses").update({
+      bank_account_number: encryptField(b.bank_account_number),
+    }).eq("id", b.id);
+  }
+}
+console.log("backfill complete");
+```
+
+## Verify
+1. `cd dashboard && npm run build` — compiles (no new errors).
+2. With `BANK_FIELD_KEY` set, save bank details through onboarding, then check the DB:
+   the stored `bank_account_number` should now start with `v1:` (ciphertext), not the
+   raw digits.
+3. Unset the key and confirm a save fails closed with the clear
+   "BANK_FIELD_KEY is not set" error rather than writing plaintext.

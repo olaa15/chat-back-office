@@ -3,6 +3,7 @@
 import crypto from "node:crypto";
 import { adminClient } from "@/lib/supabase-admin";
 import { getServerClient } from "@/lib/supabase-server";
+import { encryptField } from "@/lib/crypto";
 
 // ── Connect-code settings ────────────────────────────────────────────────
 // 32-char alphabet excluding ambiguous 0/O and 1/I. 32^6 ≈ 1.07e9 combinations,
@@ -98,7 +99,7 @@ export async function updateBusinessProfile(
     .update({
       bank_name: data.bankName || null,
       bank_account_name: data.bankAccountName || null,
-      bank_account_number: data.bankAccountNumber || null,
+      bank_account_number: data.bankAccountNumber ? encryptField(data.bankAccountNumber) : null,
       logo_url: data.logoUrl || null,
     })
     .eq("id", businessId);
