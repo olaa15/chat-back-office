@@ -329,7 +329,7 @@ create policy "read business receipts" on storage.objects
 -- =============================================================
 
 alter table public.businesses
-  add column vat_rate numeric(5,2) not null default 0
+  add column if not exists vat_rate numeric(5,2) not null default 0
     check (vat_rate >= 0 and vat_rate <= 100);
 
 -- =============================================================

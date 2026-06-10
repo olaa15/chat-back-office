@@ -49,38 +49,45 @@ function generateConnectCodeString(): string {
 }
 
 // NOTE: identity now comes from the session — `userId` is no longer a parameter.
+type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
 export async function createBusiness(data: {
   name: string;
   currency: string;
   address: string;
   vatRate?: number;
-}): Promise<string> {
-  const { user } = await requireUser();
+}): Promise<ActionResult<string>> {
+  try {
+    const { user } = await requireUser();
 
-  // RLS intentionally has no INSERT policy on businesses/business_members, so
-  // self-service creation uses the admin client — but it can ONLY ever create a
-  // business owned by the current session user, never an arbitrary one.
-  const { data: business, error } = await adminClient
-    .from("businesses")
-    .insert({
-      name: data.name,
-      currency: data.currency,
-      address: data.address,
-      vat_rate: data.vatRate ?? 0,
-    })
-    .select("id")
-    .single();
+    // RLS intentionally has no INSERT policy on businesses/business_members, so
+    // self-service creation uses the admin client — but it can ONLY ever create a
+    // business owned by the current session user, never an arbitrary one.
+    const { data: business, error } = await adminClient
+      .from("businesses")
+      .insert({
+        name: data.name,
+        currency: data.currency,
+        address: data.address,
+        vat_rate: data.vatRate ?? 0,
+      })
+      .select("id")
+      .single();
 
-  if (error || !business) throw new Error(`Failed to create business: ${error?.message}`);
+    if (error || !business)
+      return { ok: false, error: `Failed to create business: ${error?.message}` };
 
-  const { error: memberError } = await adminClient.from("business_members").insert({
-    business_id: business.id,
-    user_id: user.id,
-    role: "owner",
-  });
-  if (memberError) throw new Error(`Failed to link owner: ${memberError.message}`);
+    const { error: memberError } = await adminClient.from("business_members").insert({
+      business_id: business.id,
+      user_id: user.id,
+      role: "owner",
+    });
+    if (memberError) return { ok: false, error: `Failed to link owner: ${memberError.message}` };
 
-  return business.id as string;
+    return { ok: true, data: business.id as string };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 export async function updateBusinessProfile(
@@ -91,62 +98,75 @@ export async function updateBusinessProfile(
     bankAccountNumber?: string;
     logoUrl?: string;
   }
-): Promise<void> {
-  await assertMember(businessId);
+): Promise<ActionResult<null>> {
+  try {
+    await assertMember(businessId);
 
-  const { error } = await adminClient
-    .from("businesses")
-    .update({
-      bank_name: data.bankName || null,
-      bank_account_name: data.bankAccountName || null,
-      bank_account_number: data.bankAccountNumber ? encryptField(data.bankAccountNumber) : null,
-      logo_url: data.logoUrl || null,
-    })
-    .eq("id", businessId);
-  if (error) throw new Error(`Failed to update profile: ${error.message}`);
+    const { error } = await adminClient
+      .from("businesses")
+      .update({
+        bank_name: data.bankName || null,
+        bank_account_name: data.bankAccountName || null,
+        bank_account_number: data.bankAccountNumber ? encryptField(data.bankAccountNumber) : null,
+        logo_url: data.logoUrl || null,
+      })
+      .eq("id", businessId);
+    if (error) return { ok: false, error: `Failed to update profile: ${error.message}` };
+    return { ok: true, data: null };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 export async function uploadLogo(
   businessId: string,
   formData: FormData
-): Promise<string | null> {
-  await assertMember(businessId);
+): Promise<ActionResult<string | null>> {
+  try {
+    await assertMember(businessId);
 
-  const file = formData.get("logo") as File | null;
-  if (!file || file.size === 0) return null;
+    const file = formData.get("logo") as File | null;
+    if (!file || file.size === 0) return { ok: true, data: null };
 
-  // Basic upload hardening — constrain type and size before touching storage.
-  const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
-  if (!ALLOWED.includes(file.type)) throw new Error("Unsupported logo file type");
-  if (file.size > 2 * 1024 * 1024) throw new Error("Logo must be under 2MB");
+    // Basic upload hardening — constrain type and size before touching storage.
+    const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+    if (!ALLOWED.includes(file.type)) return { ok: false, error: "Unsupported logo file type" };
+    if (file.size > 2 * 1024 * 1024) return { ok: false, error: "Logo must be under 2MB" };
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
-  const path = `${businessId}/logo.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
+    const path = `${businessId}/logo.${ext}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error } = await adminClient.storage
-    .from("logos")
-    .upload(path, buffer, { contentType: file.type, upsert: true });
-  if (error) return null;
+    const { error } = await adminClient.storage
+      .from("logos")
+      .upload(path, buffer, { contentType: file.type, upsert: true });
+    if (error) return { ok: true, data: null };
 
-  const { data } = adminClient.storage.from("logos").getPublicUrl(path);
-  return data.publicUrl;
+    const { data } = adminClient.storage.from("logos").getPublicUrl(path);
+    return { ok: true, data: data.publicUrl };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 // NOTE: `userId` removed — derived from the session via assertMember.
-export async function generateConnectCode(businessId: string): Promise<string> {
-  await assertMember(businessId);
+export async function generateConnectCode(businessId: string): Promise<ActionResult<string>> {
+  try {
+    await assertMember(businessId);
 
-  const code = generateConnectCodeString();
-  const expiresAt = new Date(Date.now() + CONNECT_CODE_TTL_MINUTES * 60_000).toISOString();
+    const code = generateConnectCodeString();
+    const expiresAt = new Date(Date.now() + CONNECT_CODE_TTL_MINUTES * 60_000).toISOString();
 
-  const { error } = await adminClient
-    .from("businesses")
-    .update({ connect_code: code, connect_code_expires_at: expiresAt })
-    .eq("id", businessId);
-  if (error) throw new Error(`Failed to generate connect code: ${error.message}`);
+    const { error } = await adminClient
+      .from("businesses")
+      .update({ connect_code: code, connect_code_expires_at: expiresAt })
+      .eq("id", businessId);
+    if (error) return { ok: false, error: `Failed to generate connect code: ${error.message}` };
 
-  return code;
+    return { ok: true, data: code };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 export async function checkTelegramLinked(businessId: string): Promise<boolean> {

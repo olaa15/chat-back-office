@@ -95,18 +95,18 @@ export default function OnboardingPage() {
     setLoading(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
-    try {
-      const vatRateRaw = Number(fd.get("vatRate"));
-      const id = await createBusiness({
-        name: fd.get("name") as string,
-        currency: fd.get("currency") as string,
-        address: fd.get("address") as string,
-        vatRate: Number.isFinite(vatRateRaw) ? Math.min(Math.max(vatRateRaw, 0), 100) : 0,
-      });
-      setBusinessId(id);
+    const vatRateRaw = Number(fd.get("vatRate"));
+    const result = await createBusiness({
+      name: fd.get("name") as string,
+      currency: fd.get("currency") as string,
+      address: fd.get("address") as string,
+      vatRate: Number.isFinite(vatRateRaw) ? Math.min(Math.max(vatRateRaw, 0), 100) : 0,
+    });
+    if (!result.ok) {
+      setError(result.error);
+    } else {
+      setBusinessId(result.data);
       setStep(2);
-    } catch (err) {
-      setError((err as Error).message);
     }
     setLoading(false);
   }
@@ -116,25 +116,39 @@ export default function OnboardingPage() {
     setLoading(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
-    try {
-      let logoUrl: string | null = null;
-      const logoFile = fd.get("logo") as File | null;
-      if (logoFile && logoFile.size > 0) {
-        const logoForm = new FormData();
-        logoForm.append("logo", logoFile);
-        logoUrl = await uploadLogo(businessId, logoForm);
+
+    let logoUrl: string | null = null;
+    const logoFile = fd.get("logo") as File | null;
+    if (logoFile && logoFile.size > 0) {
+      const logoForm = new FormData();
+      logoForm.append("logo", logoFile);
+      const logoResult = await uploadLogo(businessId, logoForm);
+      if (!logoResult.ok) {
+        setError(logoResult.error);
+        setLoading(false);
+        return;
       }
-      await updateBusinessProfile(businessId, {
-        bankName: fd.get("bankName") as string,
-        bankAccountName: fd.get("bankAccountName") as string,
-        bankAccountNumber: fd.get("bankAccountNumber") as string,
-        logoUrl: logoUrl ?? undefined,
-      });
-      const code = await generateConnectCode(businessId);
-      setConnectCode(code);
+      logoUrl = logoResult.data;
+    }
+
+    const profileResult = await updateBusinessProfile(businessId, {
+      bankName: fd.get("bankName") as string,
+      bankAccountName: fd.get("bankAccountName") as string,
+      bankAccountNumber: fd.get("bankAccountNumber") as string,
+      logoUrl: logoUrl ?? undefined,
+    });
+    if (!profileResult.ok) {
+      setError(profileResult.error);
+      setLoading(false);
+      return;
+    }
+
+    const codeResult = await generateConnectCode(businessId);
+    if (!codeResult.ok) {
+      setError(codeResult.error);
+    } else {
+      setConnectCode(codeResult.data);
       setStep(3);
-    } catch (err) {
-      setError((err as Error).message);
     }
     setLoading(false);
   }

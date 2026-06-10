@@ -12,6 +12,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checkEmail, setCheckEmail] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,16 +20,28 @@ export default function SignupPage() {
     setError(null);
 
     const supabase = getBrowserClient();
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
-      setError(error.message);
+      const msg = error.message.toLowerCase();
+      if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {
+        setError("An account with this email already exists. Try signing in instead.");
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
     }
 
-    router.push("/onboarding");
-    router.refresh();
+    if (data.session) {
+      // Email confirmation disabled — session is live, go straight to onboarding.
+      router.push("/onboarding");
+      router.refresh();
+    } else {
+      // Confirmation email sent — tell the user to check their inbox.
+      setCheckEmail(true);
+    }
+    setLoading(false);
   }
 
   return (
@@ -84,6 +97,23 @@ export default function SignupPage() {
             <Logo tone="light" />
           </div>
 
+          {checkEmail ? (
+            <div className="rounded-xl border border-line bg-surface p-6 text-center">
+              <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-brand/10 text-brand">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <h2 className="font-display text-xl font-semibold text-ink">Check your email</h2>
+              <p className="mt-2 text-sm text-ink-muted">
+                We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then come back to sign in.
+              </p>
+              <a href="/login" className="mt-5 inline-block text-sm font-medium text-brand hover:underline">
+                Go to sign in →
+              </a>
+            </div>
+          ) : (
+          <>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-ink">
             Create your account
           </h1>
@@ -135,6 +165,8 @@ export default function SignupPage() {
               Sign in
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>

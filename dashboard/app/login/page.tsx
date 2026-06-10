@@ -85,7 +85,12 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink">Password</label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="text-sm font-medium text-ink">Password</label>
+                <Link href="/forgot-password" className="text-xs text-brand hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 value={password}
@@ -116,6 +121,16 @@ export default function LoginPage() {
             <Link href="/signup" className="font-medium text-brand hover:underline">
               Create one
             </Link>
+          </p>
+
+          <p className="mt-3 text-center text-xs text-ink-faint">
+            Can&apos;t remember your email?{" "}
+            <a
+              href="mailto:support@ordeva.co.uk"
+              className="font-medium text-ink-muted hover:text-brand hover:underline"
+            >
+              Contact support
+            </a>
           </p>
         </div>
       </div>
