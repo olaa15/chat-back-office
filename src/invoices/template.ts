@@ -1,3 +1,8 @@
+export interface LineItem {
+  description: string;
+  amount: number | null;
+}
+
 export interface InvoiceData {
   invoiceNumber: string;
   issueDate: string;
@@ -9,7 +14,7 @@ export interface InvoiceData {
     logoUrl?: string;
   };
   client: { name: string };
-  lineItem: { description: string; amount: number };
+  lineItems: LineItem[];
   totals: { subtotal: number; vatRate: number; tax: number; total: number };
   currency: string;
 }
@@ -22,7 +27,6 @@ function formatCurrency(amount: number, currency: string): string {
 }
 
 export function buildInvoiceHtml(data: InvoiceData): string {
-  const amount = formatCurrency(data.lineItem.amount, data.currency);
   const { vatRate } = data.totals;
   const totalsRows = vatRate > 0
     ? `<tr>
@@ -128,10 +132,11 @@ export function buildInvoiceHtml(data: InvoiceData): string {
       </tr>
     </thead>
     <tbody>
+      ${data.lineItems.map(item => `
       <tr>
-        <td>${data.lineItem.description}</td>
-        <td class="right">${amount}</td>
-      </tr>
+        <td>${item.description}</td>
+        <td class="right">${item.amount !== null ? formatCurrency(item.amount, data.currency) : ""}</td>
+      </tr>`).join("")}
     </tbody>
   </table>
 

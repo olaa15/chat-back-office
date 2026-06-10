@@ -2,7 +2,30 @@ import puppeteer from "puppeteer";
 import { getBusinessById } from "../db/queries";
 import { InvoiceFields } from "../llm/tools";
 import { InvoiceTotals } from "./calc";
-import { buildInvoiceHtml, InvoiceData } from "./template";
+import { buildInvoiceHtml, InvoiceData, LineItem } from "./template";
+
+function parseLineItems(description: string, currency: string, totalAmount: number): LineItem[] {
+  // Match patterns like "1. Service Name – £500" or "1. Service Name - $500"
+  const currencySymbols: Record<string, string> = {
+    GBP: "£", USD: "\\$", EUR: "€", NGN: "₦",
+  };
+  const symbol = (currencySymbols[currency] ?? "[£$€₦]").replace("$", "\\$");
+  const pattern = new RegExp(
+    `\\d+\\.\\s+([^\\-–]+?)\\s*[\\-–]+\\s*${symbol}([\\d,]+(?:\\.\\d{1,2})?)`,
+    "gi"
+  );
+
+  const matches = [...description.matchAll(pattern)];
+  if (matches.length > 1) {
+    return matches.map(m => ({
+      description: m[1].trim(),
+      amount: parseFloat(m[2].replace(/,/g, "")),
+    }));
+  }
+
+  // Single item — use total subtotal as amount
+  return [{ description, amount: totalAmount }];
+}
 
 export async function generateInvoicePdf(
   fields: InvoiceFields,
@@ -25,7 +48,7 @@ export async function generateInvoicePdf(
       logoUrl: business?.logo_url ?? undefined,
     },
     client: { name: fields.client_name },
-    lineItem: { description: fields.description, amount: totals.subtotal },
+    lineItems: parseLineItems(fields.description, fields.currency ?? "GBP", totals.subtotal),
     totals,
     currency: fields.currency,
   };
