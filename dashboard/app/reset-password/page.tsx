@@ -14,10 +14,26 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [done, setDone] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
-  // Supabase puts the recovery token in the URL hash. We wait for it to be
-  // exchanged for a session before allowing the form to submit.
   useEffect(() => {
+    // Check for error params Supabase appends when the link is invalid/expired.
+    const hash = window.location.hash;
+    const params = new URLSearchParams(
+      hash.startsWith("#") ? hash.slice(1) : window.location.search.slice(1)
+    );
+    const errCode = params.get("error_code");
+    if (errCode === "otp_expired") {
+      setLinkError("This reset link has expired. Please request a new one.");
+      return;
+    }
+    if (params.get("error")) {
+      setLinkError("This reset link is invalid. Please request a new one.");
+      return;
+    }
+
+    // Supabase puts the recovery token in the URL hash. We wait for it to be
+    // exchanged for a session before allowing the form to submit.
     const supabase = getBrowserClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setReady(true);
@@ -76,6 +92,22 @@ export default function ResetPasswordPage() {
             </div>
             <h2 className="font-display text-xl font-semibold text-ink">Password updated</h2>
             <p className="mt-2 text-sm text-ink-muted">Redirecting you to the dashboard…</p>
+          </div>
+        ) : linkError ? (
+          <div className="rounded-xl border border-line bg-surface p-6 text-center">
+            <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-overdue-bg text-overdue-fg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h2 className="font-display text-xl font-semibold text-ink">Link expired</h2>
+            <p className="mt-2 text-sm text-ink-muted">{linkError}</p>
+            <Link
+              href="/forgot-password"
+              className="mt-5 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-strong"
+            >
+              Request a new link
+            </Link>
           </div>
         ) : !ready ? (
           <div className="rounded-xl border border-line bg-surface p-6 text-center">
