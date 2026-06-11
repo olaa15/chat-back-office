@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
+import Image from "next/image";
 import { COUNTRY_LIST, getCountryFormat } from "@/lib/countryFormats";
-import { saveBusinessSettings } from "./actions";
+import { saveBusinessSettings, uploadSettingsLogo } from "./actions";
 
 const CURRENCY_OPTIONS = [
   { value: "GBP", label: "GBP — British Pound (£)" },
@@ -21,6 +22,7 @@ interface Settings {
   currency: string;
   vatRate: number;
   country: string;
+  logoUrl: string;
   bankName: string;
   bankAccountName: string;
   bankAccountType: string;
@@ -31,7 +33,27 @@ interface Settings {
 export default function SettingsForm({ settings }: { settings: Settings }) {
   const [country, setCountry] = useState(settings.country);
   const [state, action, pending] = useActionState(saveBusinessSettings, null);
+  const [logoUrl, setLogoUrl] = useState(settings.logoUrl);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const countryFormat = getCountryFormat(country);
+
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    setLogoError(null);
+    const fd = new FormData();
+    fd.append("logo", file);
+    const result = await uploadSettingsLogo(fd);
+    if (result.ok) {
+      setLogoUrl(result.data);
+    } else {
+      setLogoError(result.error);
+    }
+    setLogoUploading(false);
+  }
 
   const inputCls =
     "w-full rounded-lg border border-line-strong bg-surface px-3.5 py-2.5 text-sm text-ink placeholder-ink-faint transition-shadow focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10";
@@ -60,6 +82,37 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
 
   return (
     <form action={action} className="space-y-8">
+      {/* Logo */}
+      <section className="rounded-xl border border-line bg-surface p-6 space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-ink-faint">Logo</h2>
+        <div className="flex items-center gap-5">
+          {logoUrl ? (
+            <img src={logoUrl} alt="Business logo" className="h-16 w-16 rounded-lg object-contain border border-line bg-white p-1" />
+          ) : (
+            <div className="h-16 w-16 rounded-lg border border-line bg-ink-faint/10 flex items-center justify-center text-xs text-ink-faint">No logo</div>
+          )}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={logoUploading}
+              className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-ink-faint/5 disabled:opacity-50 transition-colors"
+            >
+              {logoUploading ? "Uploading…" : logoUrl ? "Change logo" : "Upload logo"}
+            </button>
+            <p className="text-xs text-ink-faint">PNG, JPG, WebP or SVG · max 2 MB</p>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            className="hidden"
+            onChange={handleLogoChange}
+          />
+        </div>
+        {logoError && <p className="text-sm text-overdue-fg">{logoError}</p>}
+      </section>
+
       {/* Business details */}
       <section className="rounded-xl border border-line bg-surface p-6 space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-ink-faint">Business</h2>

@@ -22,6 +22,33 @@ async function requireMembership(): Promise<{ userId: string; businessId: string
   return { userId: user.id, businessId: data.business_id };
 }
 
+export async function uploadSettingsLogo(formData: FormData): Promise<ActionResult<string>> {
+  try {
+    const { businessId } = await requireMembership();
+    const file = formData.get("logo") as File | null;
+    if (!file || file.size === 0) return { ok: false, error: "No file selected" };
+
+    const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+    if (!ALLOWED.includes(file.type)) return { ok: false, error: "Unsupported file type (PNG, JPG, WebP, SVG only)" };
+    if (file.size > 2 * 1024 * 1024) return { ok: false, error: "Logo must be under 2 MB" };
+
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
+    const path = `${businessId}/logo.${ext}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    const { error } = await adminClient.storage
+      .from("logos")
+      .upload(path, buffer, { contentType: file.type, upsert: true });
+    if (error) return { ok: false, error: error.message };
+
+    const { data } = adminClient.storage.from("logos").getPublicUrl(path);
+    await adminClient.from("businesses").update({ logo_url: data.publicUrl }).eq("id", businessId);
+    return { ok: true, data: data.publicUrl };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 export async function getBusinessSettings(): Promise<ActionResult<{
   businessId: string;
   name: string;
@@ -29,6 +56,7 @@ export async function getBusinessSettings(): Promise<ActionResult<{
   currency: string;
   vatRate: number;
   country: string;
+  logoUrl: string;
   bankName: string;
   bankAccountName: string;
   bankAccountType: string;
@@ -39,7 +67,7 @@ export async function getBusinessSettings(): Promise<ActionResult<{
     const { businessId } = await requireMembership();
     const { data, error } = await adminClient
       .from("businesses")
-      .select("name, address, currency, vat_rate, country, bank_name, bank_account_name, bank_account_type, bank_swift_bic, mobile_money_provider")
+      .select("name, address, currency, vat_rate, country, logo_url, bank_name, bank_account_name, bank_account_type, bank_swift_bic, mobile_money_provider")
       .eq("id", businessId)
       .single();
 
@@ -54,6 +82,7 @@ export async function getBusinessSettings(): Promise<ActionResult<{
         currency: data.currency ?? "GBP",
         vatRate: Number(data.vat_rate ?? 0),
         country: data.country ?? "GB",
+        logoUrl: data.logo_url ?? "",
         bankName: data.bank_name ?? "",
         bankAccountName: data.bank_account_name ?? "",
         bankAccountType: data.bank_account_type ?? "",
