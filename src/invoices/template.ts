@@ -162,8 +162,9 @@ export function buildInvoiceHtml(data: InvoiceData): string {
   <div class="header">
     <div>
       ${data.business.logoUrl
-        ? `<img src="${data.business.logoUrl}" alt="${data.business.name}" style="height:48px;object-fit:contain;margin-bottom:8px;display:block;" />`
-        : `<div class="business-name">${data.business.name}</div>`}
+        ? `<img src="${data.business.logoUrl}" alt="${data.business.name}" style="height:48px;object-fit:contain;margin-bottom:6px;display:block;" />`
+        : ""}
+      <div class="business-name">${data.business.name}</div>
       <div class="business-meta">
         ${addressHtml}${data.business.email ? `<br/>${data.business.email}` : ""}
       </div>
