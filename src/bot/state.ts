@@ -5,6 +5,7 @@ import { ExpenseFields, InvoiceFields, PaymentFields } from "../llm/tools";
 export type ConversationState =
   | { stage: "idle" }
   | { stage: "awaiting_confirmation"; fields: InvoiceFields; totals: InvoiceTotals }
+  | { stage: "awaiting_due_date"; fields: InvoiceFields; businessVatRate: number }
   | { stage: "awaiting_payment_confirmation"; payment: PaymentFields; invoiceId: string }
   | { stage: "awaiting_expense_confirmation"; expense: ExpenseFields; imageBufferB64: string; mimeType: string };
 

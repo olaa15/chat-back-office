@@ -1,10 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+export interface InvoiceLineItem {
+  description: string;
+  amount: number;
+  quantity?: number;
+}
+
 export interface InvoiceFields {
   client_name: string;
-  amount: number;
+  items: InvoiceLineItem[];
   currency: string;
-  description: string;
   due_date?: string;
   vat_rate?: number;
 }
@@ -23,13 +28,25 @@ export const createInvoiceTool: Anthropic.Tool = {
     type: "object" as const,
     properties: {
       client_name: { type: "string", description: "Name of the client to invoice" },
-      amount:      { type: "number", description: "Invoice amount as a positive number — never invent this" },
+      items: {
+        type: "array",
+        minItems: 1,
+        description: "One element per distinct service or product. Each has its own price. Never invent amounts.",
+        items: {
+          type: "object",
+          properties: {
+            description: { type: "string", description: "Description of the service or product" },
+            amount: { type: "number", description: "Price for this line item. Never invent or guess." },
+            quantity: { type: "number", description: "Quantity — defaults to 1 if not stated." },
+          },
+          required: ["description", "amount"],
+        },
+      },
       currency:    { type: "string", description: "ISO currency code, ONLY if the user states or implies one (a symbol like ₦/$/€/£ counts). Omit entirely if not stated — the system applies the business's default currency." },
-      description: { type: "string", description: "Description of the service or product" },
-      due_date:    { type: "string", description: "Due date as ISO date string YYYY-MM-DD (optional)" },
+      due_date:    { type: "string", description: "Due date as ISO date string YYYY-MM-DD. Resolve relative expressions ('in 7 days', 'end of month', 'next Friday') to a concrete date using today's date." },
       vat_rate:    { type: "number", description: "VAT/tax rate as a percentage, ONLY if the user explicitly states one (e.g. 'plus 20% VAT' → 20, 'no VAT' / 'VAT exempt' → 0, '+5% tax' → 5). Omit entirely if VAT/tax isn't mentioned — the system applies the business's default rate. Never guess a rate." },
     },
-    required: ["client_name", "amount", "description"],
+    required: ["client_name", "items"],
   },
 };
 

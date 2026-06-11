@@ -1,6 +1,9 @@
+import { getCountryFormat } from "../format/countryFormats";
+
 export interface LineItem {
   description: string;
-  amount: number | null;
+  amount: number;
+  quantity?: number;
 }
 
 export interface InvoiceData {
@@ -10,6 +13,7 @@ export interface InvoiceData {
   business: {
     name: string;
     address: string;
+    country: string;
     email: string;
     logoUrl?: string;
   };
@@ -17,6 +21,7 @@ export interface InvoiceData {
   lineItems: LineItem[];
   totals: { subtotal: number; vatRate: number; tax: number; total: number };
   currency: string;
+  payment: { label: string; value: string }[];
 }
 
 function formatCurrency(amount: number, currency: string): string {
@@ -28,6 +33,45 @@ function formatCurrency(amount: number, currency: string): string {
 
 export function buildInvoiceHtml(data: InvoiceData): string {
   const { vatRate } = data.totals;
+
+  // Country-formatted address
+  const countryFormat = getCountryFormat(data.business.country);
+  const addressLines = countryFormat.formatAddress(
+    data.business.address.split(/\n|,\s*/)
+  );
+  const addressHtml = addressLines.join("<br/>");
+
+  // Items table — use 4 columns if any item has quantity > 1
+  const hasQty = data.lineItems.some((i) => i.quantity != null && i.quantity !== 1);
+  const tableHead = hasQty
+    ? `<tr>
+        <th>Description</th>
+        <th class="right">Qty</th>
+        <th class="right">Unit price</th>
+        <th class="right">Amount</th>
+      </tr>`
+    : `<tr>
+        <th>Description</th>
+        <th class="right">Amount</th>
+      </tr>`;
+
+  const tableBody = data.lineItems.map((item) => {
+    const qty = item.quantity ?? 1;
+    const lineAmount = item.amount * qty;
+    if (hasQty) {
+      return `<tr>
+        <td>${item.description}</td>
+        <td class="right">${qty}</td>
+        <td class="right">${formatCurrency(item.amount, data.currency)}</td>
+        <td class="right">${formatCurrency(lineAmount, data.currency)}</td>
+      </tr>`;
+    }
+    return `<tr>
+      <td>${item.description}</td>
+      <td class="right">${formatCurrency(lineAmount, data.currency)}</td>
+    </tr>`;
+  }).join("");
+
   const totalsRows = vatRate > 0
     ? `<tr>
         <td>Subtotal</td>
@@ -45,6 +89,17 @@ export function buildInvoiceHtml(data: InvoiceData): string {
         <td>Total</td>
         <td class="right">${formatCurrency(data.totals.total, data.currency)}</td>
       </tr>`;
+
+  const paymentBlock = data.payment.length > 0
+    ? `<div class="payment-details">
+        <div class="payment-heading">Payment details</div>
+        ${data.payment.map((p) => `
+        <div class="payment-row">
+          <span class="payment-label">${p.label}</span>
+          <span class="payment-value">${p.value}</span>
+        </div>`).join("")}
+      </div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -90,6 +145,13 @@ export function buildInvoiceHtml(data: InvoiceData): string {
     .totals td { padding: 6px 14px; }
     .totals .total-row td { font-weight: 700; font-size: 15px; border-top: 2px solid #111; padding-top: 10px; }
 
+    /* Payment details */
+    .payment-details { margin-top: 36px; border-top: 1px solid #e5e5e5; padding-top: 20px; }
+    .payment-heading { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 12px; }
+    .payment-row { display: flex; gap: 12px; margin-bottom: 6px; font-size: 13px; }
+    .payment-label { color: #555; min-width: 180px; }
+    .payment-value { color: #111; font-weight: 500; }
+
     /* Footer */
     .footer { margin-top: 56px; font-size: 12px; color: #aaa; text-align: center; }
   </style>
@@ -103,8 +165,7 @@ export function buildInvoiceHtml(data: InvoiceData): string {
         ? `<img src="${data.business.logoUrl}" alt="${data.business.name}" style="height:48px;object-fit:contain;margin-bottom:8px;display:block;" />`
         : `<div class="business-name">${data.business.name}</div>`}
       <div class="business-meta">
-        ${data.business.address}<br/>
-        ${data.business.email}
+        ${addressHtml}${data.business.email ? `<br/>${data.business.email}` : ""}
       </div>
     </div>
     <div class="invoice-label">
@@ -126,17 +187,10 @@ export function buildInvoiceHtml(data: InvoiceData): string {
 
   <table>
     <thead>
-      <tr>
-        <th>Description</th>
-        <th class="right">Amount</th>
-      </tr>
+      ${tableHead}
     </thead>
     <tbody>
-      ${data.lineItems.map(item => `
-      <tr>
-        <td>${item.description}</td>
-        <td class="right">${item.amount !== null ? formatCurrency(item.amount, data.currency) : ""}</td>
-      </tr>`).join("")}
+      ${tableBody}
     </tbody>
   </table>
 
@@ -145,6 +199,8 @@ export function buildInvoiceHtml(data: InvoiceData): string {
       ${totalsRows}
     </table>
   </div>
+
+  ${paymentBlock}
 
   <div class="footer">Thank you for your business.</div>
 

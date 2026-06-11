@@ -51,10 +51,61 @@ function generateConnectCodeString(): string {
 // NOTE: identity now comes from the session — `userId` is no longer a parameter.
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+type ProfileData = {
+  bankName?: string;
+  bankAccountName?: string;
+  bankAccountNumber?: string;
+  bankSortCode?: string;
+  bankRoutingNumber?: string;
+  bankAccountType?: string;
+  bankInstitutionNo?: string;
+  bankTransitNo?: string;
+  bankBsb?: string;
+  bankBranchCode?: string;
+  bankIban?: string;
+  bankSwiftBic?: string;
+  mobileMoneyProvider?: string;
+  mobileMoneyNumber?: string;
+  logoUrl?: string;
+};
+
+function validateBankFields(country: string, data: ProfileData): string | null {
+  if (data.bankSortCode) {
+    const digits = data.bankSortCode.replace(/\D/g, "");
+    if (digits.length !== 6) return "Sort code must be 6 digits (e.g. 12-34-56)";
+  }
+  if (data.bankRoutingNumber && !/^\d{9}$/.test(data.bankRoutingNumber)) {
+    return "Routing number must be exactly 9 digits";
+  }
+  if (data.bankAccountNumber && country === "NG" && !/^\d{10}$/.test(data.bankAccountNumber)) {
+    return "Account number must be 10 digits (NUBAN)";
+  }
+  if (data.bankBsb) {
+    const digits = data.bankBsb.replace(/\D/g, "");
+    if (digits.length !== 6) return "BSB must be 6 digits (e.g. 123-456)";
+  }
+  if (data.mobileMoneyNumber && country === "GH" && !/^0\d{9}$/.test(data.mobileMoneyNumber)) {
+    return "Mobile money number must be 10 digits starting with 0";
+  }
+  if (data.bankIban) {
+    const iban = data.bankIban.replace(/\s/g, "").toUpperCase();
+    if (iban.length < 15 || iban.length > 34) return "IBAN length is invalid";
+    const rearranged = iban.slice(4) + iban.slice(0, 4);
+    const numeric = rearranged.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+    let remainder = BigInt(0);
+    for (const chunk of numeric.match(/.{1,9}/g) ?? []) {
+      remainder = (BigInt(remainder.toString() + chunk)) % BigInt(97);
+    }
+    if (remainder !== BigInt(1)) return "IBAN checksum is invalid — please double-check";
+  }
+  return null;
+}
+
 export async function createBusiness(data: {
   name: string;
   currency: string;
   address: string;
+  country: string;
   vatRate?: number;
 }): Promise<ActionResult<string>> {
   try {
@@ -69,6 +120,7 @@ export async function createBusiness(data: {
         name: data.name,
         currency: data.currency,
         address: data.address,
+        country: data.country || "GB",
         vat_rate: data.vatRate ?? 0,
       })
       .select("id")
@@ -92,22 +144,34 @@ export async function createBusiness(data: {
 
 export async function updateBusinessProfile(
   businessId: string,
-  data: {
-    bankName?: string;
-    bankAccountName?: string;
-    bankAccountNumber?: string;
-    logoUrl?: string;
-  }
+  country: string,
+  data: ProfileData
 ): Promise<ActionResult<null>> {
   try {
     await assertMember(businessId);
+
+    const validationError = validateBankFields(country, data);
+    if (validationError) return { ok: false, error: validationError };
+
+    const enc = (v: string | undefined) => (v ? encryptField(v) : null);
 
     const { error } = await adminClient
       .from("businesses")
       .update({
         bank_name: data.bankName || null,
         bank_account_name: data.bankAccountName || null,
-        bank_account_number: data.bankAccountNumber ? encryptField(data.bankAccountNumber) : null,
+        bank_account_number: enc(data.bankAccountNumber),
+        bank_sort_code: enc(data.bankSortCode),
+        bank_routing_number: enc(data.bankRoutingNumber),
+        bank_account_type: data.bankAccountType || null,
+        bank_institution_no: enc(data.bankInstitutionNo),
+        bank_transit_no: enc(data.bankTransitNo),
+        bank_bsb: enc(data.bankBsb),
+        bank_branch_code: enc(data.bankBranchCode),
+        bank_iban: enc(data.bankIban),
+        bank_swift_bic: data.bankSwiftBic || null,
+        mobile_money_provider: data.mobileMoneyProvider || null,
+        mobile_money_number: enc(data.mobileMoneyNumber),
         logo_url: data.logoUrl || null,
       })
       .eq("id", businessId);

@@ -1,31 +1,9 @@
 import puppeteer from "puppeteer";
+import { getCountryFormat } from "../format/countryFormats";
 import { getBusinessById } from "../db/queries";
 import { InvoiceFields } from "../llm/tools";
 import { InvoiceTotals } from "./calc";
-import { buildInvoiceHtml, InvoiceData, LineItem } from "./template";
-
-function parseLineItems(description: string, currency: string, totalAmount: number): LineItem[] {
-  // Match patterns like "1. Service Name – £500" or "1. Service Name - $500"
-  const currencySymbols: Record<string, string> = {
-    GBP: "£", USD: "\\$", EUR: "€", NGN: "₦",
-  };
-  const symbol = (currencySymbols[currency] ?? "[£$€₦]").replace("$", "\\$");
-  const pattern = new RegExp(
-    `\\d+\\.\\s+([^\\-–]+?)\\s*[\\-–]+\\s*${symbol}([\\d,]+(?:\\.\\d{1,2})?)`,
-    "gi"
-  );
-
-  const matches = [...description.matchAll(pattern)];
-  if (matches.length > 1) {
-    return matches.map(m => ({
-      description: m[1].trim(),
-      amount: parseFloat(m[2].replace(/,/g, "")),
-    }));
-  }
-
-  // Single item — use total subtotal as amount
-  return [{ description, amount: totalAmount }];
-}
+import { buildInvoiceHtml, InvoiceData } from "./template";
 
 export async function generateInvoicePdf(
   fields: InvoiceFields,
@@ -34,6 +12,28 @@ export async function generateInvoicePdf(
   businessId: string
 ): Promise<Buffer> {
   const business = await getBusinessById(businessId);
+  const country = business?.country ?? "GB";
+  const countryFormat = getCountryFormat(country);
+
+  // Build decrypted bank record for the payment-details block
+  const bankRecord: Record<string, string | null> = {
+    bank_name: business?.bank_name ?? null,
+    bank_account_name: business?.bank_account_name ?? null,
+    bank_account_number: business?.bank_account_number ?? null,
+    bank_sort_code: business?.bank_sort_code ?? null,
+    bank_routing_number: business?.bank_routing_number ?? null,
+    bank_account_type: business?.bank_account_type ?? null,
+    bank_institution_no: business?.bank_institution_no ?? null,
+    bank_transit_no: business?.bank_transit_no ?? null,
+    bank_bsb: business?.bank_bsb ?? null,
+    bank_branch_code: business?.bank_branch_code ?? null,
+    bank_iban: business?.bank_iban ?? null,
+    bank_swift_bic: business?.bank_swift_bic ?? null,
+    mobile_money_provider: business?.mobile_money_provider ?? null,
+    mobile_money_number: business?.mobile_money_number ?? null,
+  };
+
+  const payment = countryFormat.formatBankDetails(bankRecord);
 
   const data: InvoiceData = {
     invoiceNumber,
@@ -43,14 +43,20 @@ export async function generateInvoicePdf(
       : "On receipt",
     business: {
       name: business?.name ?? "My Business",
-      address: business?.address ?? "London, United Kingdom",
+      address: business?.address ?? "",
+      country,
       email: business?.email ?? "",
       logoUrl: business?.logo_url ?? undefined,
     },
     client: { name: fields.client_name },
-    lineItems: parseLineItems(fields.description, fields.currency ?? "GBP", totals.subtotal),
+    lineItems: fields.items.map((item) => ({
+      description: item.description,
+      amount: item.amount,
+      quantity: item.quantity,
+    })),
     totals,
     currency: fields.currency,
+    payment,
   };
 
   const browser = await puppeteer.launch({

@@ -357,3 +357,22 @@ create table if not exists public.conversation_state (
   expires_at timestamptz not null,
   updated_at timestamptz not null default now()
 );
+
+-- =============================================================
+-- Iteration 1 — country + per-country bank fields + mobile money
+-- Run in Supabase SQL editor BEFORE deploying the code changes.
+-- =============================================================
+
+alter table public.businesses
+  add column if not exists country               text not null default 'GB',
+  add column if not exists bank_sort_code        text,   -- GB (encrypted)
+  add column if not exists bank_routing_number   text,   -- US (encrypted)
+  add column if not exists bank_account_type     text,   -- US: checking/savings (plain)
+  add column if not exists bank_institution_no   text,   -- CA (encrypted)
+  add column if not exists bank_transit_no       text,   -- CA (encrypted)
+  add column if not exists bank_bsb              text,   -- AU (encrypted)
+  add column if not exists bank_branch_code      text,   -- GH branch/sort (encrypted)
+  add column if not exists bank_iban             text,   -- IE/DE/SEPA (encrypted)
+  add column if not exists bank_swift_bic        text,   -- international (plain)
+  add column if not exists mobile_money_provider text,   -- NG/GH (plain)
+  add column if not exists mobile_money_number   text;   -- NG/GH (encrypted)

@@ -31,7 +31,8 @@ export const evalCases: EvalCase[] = [
       const m = expectIntent(r, "create_invoice");
       if (typeof m === "string") return m;
       if (m.data.client_name.toLowerCase() !== "abc company") return `unexpected client_name "${m.data.client_name}"`;
-      if (m.data.amount !== 250000) return `expected amount 250000, got ${m.data.amount}`;
+      if (!m.data.items?.length) return "expected items array to be non-empty";
+      if (m.data.items[0].amount !== 250000) return `expected items[0].amount 250000, got ${m.data.items[0].amount}`;
       if (m.data.currency !== "NGN") return `expected currency NGN, got ${m.data.currency}`;
       if (m.data.vat_rate !== undefined) return `expected no vat_rate, got ${m.data.vat_rate}`;
       return null;
@@ -43,7 +44,8 @@ export const evalCases: EvalCase[] = [
     check: (r) => {
       const m = expectIntent(r, "create_invoice");
       if (typeof m === "string") return m;
-      if (m.data.amount !== 500) return `expected amount 500, got ${m.data.amount}`;
+      if (!m.data.items?.length) return "expected items array to be non-empty";
+      if (m.data.items[0].amount !== 500) return `expected items[0].amount 500, got ${m.data.items[0].amount}`;
       if (m.data.vat_rate !== 20) return `expected vat_rate 20, got ${m.data.vat_rate}`;
       return null;
     },
@@ -54,7 +56,8 @@ export const evalCases: EvalCase[] = [
     check: (r) => {
       const m = expectIntent(r, "create_invoice");
       if (typeof m === "string") return m;
-      if (m.data.amount !== 1200) return `expected amount 1200, got ${m.data.amount}`;
+      if (!m.data.items?.length) return "expected items array to be non-empty";
+      if (m.data.items[0].amount !== 1200) return `expected items[0].amount 1200, got ${m.data.items[0].amount}`;
       if (m.data.vat_rate !== 0) return `expected vat_rate 0 (explicit exemption), got ${m.data.vat_rate}`;
       return null;
     },
@@ -67,6 +70,19 @@ export const evalCases: EvalCase[] = [
       const m = expectIntent(r, "create_invoice");
       if (typeof m === "string") return m;
       if (m.data.currency !== "EUR") return `expected fallback currency EUR, got ${m.data.currency}`;
+      return null;
+    },
+  },
+  {
+    label: "create_invoice — two items extracted as separate line items",
+    message: "Invoice Sara £200 for design and £50 for hosting",
+    check: (r) => {
+      const m = expectIntent(r, "create_invoice");
+      if (typeof m === "string") return m;
+      if (m.data.items.length < 2) return `expected at least 2 items, got ${m.data.items.length}`;
+      const amounts = m.data.items.map((i) => i.amount).sort((a, b) => a - b);
+      if (!amounts.includes(50)) return `expected an item with amount 50, got [${amounts}]`;
+      if (!amounts.includes(200)) return `expected an item with amount 200, got [${amounts}]`;
       return null;
     },
   },

@@ -5,6 +5,7 @@ import {
   getBalanceTool,
   getExpenseSummaryTool,
   InvoiceFields,
+  InvoiceLineItem,
   listExpensesTool,
   listInvoicesTool,
   PaymentFields,
@@ -21,7 +22,11 @@ export type IntentResult =
   | { intent: "get_expense_summary" }
   | { intent: "question"; text: string };
 
-const SYSTEM_PROMPT = `You are a back-office assistant that helps business owners manage their invoices, payments, and expenses.
+function buildSystemPrompt(): string {
+  const today = new Date().toISOString().split("T")[0];
+  return `Today is ${today}.
+
+You are a back-office assistant that helps business owners manage their invoices, payments, and expenses.
 
 You have these tools available:
 - create_invoice: when the user wants to create or generate a new invoice
@@ -33,12 +38,15 @@ You have these tools available:
 
 Rules:
 - NEVER invent or guess an amount for create_invoice or record_payment. If the amount is missing, ask for it.
-- For create_invoice: if client_name or description is missing, ask — do not call the tool.
+- For create_invoice: if client_name is missing, ask — do not call the tool.
+- Capture each distinct service or product as its own item in the items array with its own price. If the user gives one lump sum for a single service, that is one item.
+- Resolve relative due dates ('in 7 days', 'end of month', 'next Friday') to a concrete YYYY-MM-DD using today's date. Do not leave relative expressions in due_date.
 - For record_payment: if invoice_number is missing, ask which invoice. If amount is missing, ask.
 - Only set currency or vat_rate on create_invoice if the user explicitly states them — never invent either. The system applies sensible business defaults when they're omitted.
 - For list_invoices, get_balance, list_expenses, and get_expense_summary, call the tool immediately — no missing fields needed.
 - Expenses are recorded by photographing a receipt, not by typing — if the user describes a purchase in text, tell them to send a photo of the receipt instead.
 - Keep follow-up questions short and friendly.`;
+}
 
 const ALL_TOOLS = [
   createInvoiceTool,
@@ -57,7 +65,7 @@ export async function extractIntent(
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(),
     tools: ALL_TOOLS,
     messages: [{ role: "user", content: userMessage }],
   });
@@ -68,18 +76,29 @@ export async function extractIntent(
     const raw = toolBlock.input as Record<string, unknown>;
 
     switch (toolBlock.name) {
-      case "create_invoice":
+      case "create_invoice": {
+        let items: InvoiceLineItem[] = [];
+        if (Array.isArray(raw.items)) {
+          items = (raw.items as Record<string, unknown>[]).map((i) => ({
+            description: String(i.description),
+            amount: Number(i.amount),
+            quantity: i.quantity != null ? Number(i.quantity) : undefined,
+          }));
+        } else if (raw.amount !== undefined && raw.description !== undefined) {
+          // Legacy single-item fallback
+          items = [{ description: String(raw.description), amount: Number(raw.amount) }];
+        }
         return {
           intent: "create_invoice",
           data: {
             client_name: String(raw.client_name),
-            amount: Number(raw.amount),
+            items,
             currency: raw.currency ? String(raw.currency) : defaultCurrency,
-            description: String(raw.description),
             due_date: raw.due_date ? String(raw.due_date) : undefined,
             vat_rate: raw.vat_rate !== undefined && raw.vat_rate !== null ? Number(raw.vat_rate) : undefined,
           },
         };
+      }
 
       case "record_payment":
         return {

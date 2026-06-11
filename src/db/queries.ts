@@ -1,6 +1,17 @@
 import { supabase } from "./client";
 import { InvoiceTotals } from "../invoices/calc";
+import { decryptField } from "../lib/crypto";
 import { ExpenseFields, InvoiceFields, PaymentFields } from "../llm/tools";
+
+function maybeDecrypt(v: string | null | undefined): string | null {
+  if (!v) return null;
+  try {
+    return decryptField(v);
+  } catch {
+    console.warn("maybeDecrypt: failed to decrypt field value — returning null");
+    return null;
+  }
+}
 
 export interface BusinessProfile {
   name: string;
@@ -9,6 +20,21 @@ export interface BusinessProfile {
   logo_url: string | null;
   currency: string;
   vat_rate: number;
+  country: string;
+  bank_name: string | null;
+  bank_account_name: string | null;
+  bank_account_number: string | null;
+  bank_sort_code: string | null;
+  bank_routing_number: string | null;
+  bank_account_type: string | null;
+  bank_institution_no: string | null;
+  bank_transit_no: string | null;
+  bank_bsb: string | null;
+  bank_branch_code: string | null;
+  bank_iban: string | null;
+  bank_swift_bic: string | null;
+  mobile_money_provider: string | null;
+  mobile_money_number: string | null;
 }
 
 export async function getConnectCode(businessId: string): Promise<string | null> {
@@ -26,12 +52,37 @@ export async function getBusinessById(
 ): Promise<BusinessProfile | null> {
   const { data, error } = await supabase
     .from("businesses")
-    .select("name, address, logo_url, currency, vat_rate")
+    .select(
+      "name, address, logo_url, currency, vat_rate, country, bank_name, bank_account_name, bank_account_number, bank_sort_code, bank_routing_number, bank_account_type, bank_institution_no, bank_transit_no, bank_bsb, bank_branch_code, bank_iban, bank_swift_bic, mobile_money_provider, mobile_money_number"
+    )
     .eq("id", businessId)
     .single();
 
   if (error || !data) return null;
-  return { ...data, email: null, vat_rate: Number(data.vat_rate) } as BusinessProfile;
+  const d = data as Record<string, unknown>;
+  return {
+    name: d.name as string,
+    address: (d.address as string | null) ?? null,
+    email: null,
+    logo_url: (d.logo_url as string | null) ?? null,
+    currency: d.currency as string,
+    vat_rate: Number(d.vat_rate),
+    country: (d.country as string | null) ?? "GB",
+    bank_name: (d.bank_name as string | null) ?? null,
+    bank_account_name: (d.bank_account_name as string | null) ?? null,
+    bank_account_number: maybeDecrypt(d.bank_account_number as string | null),
+    bank_sort_code: maybeDecrypt(d.bank_sort_code as string | null),
+    bank_routing_number: maybeDecrypt(d.bank_routing_number as string | null),
+    bank_account_type: (d.bank_account_type as string | null) ?? null,
+    bank_institution_no: maybeDecrypt(d.bank_institution_no as string | null),
+    bank_transit_no: maybeDecrypt(d.bank_transit_no as string | null),
+    bank_bsb: maybeDecrypt(d.bank_bsb as string | null),
+    bank_branch_code: maybeDecrypt(d.bank_branch_code as string | null),
+    bank_iban: maybeDecrypt(d.bank_iban as string | null),
+    bank_swift_bic: (d.bank_swift_bic as string | null) ?? null,
+    mobile_money_provider: (d.mobile_money_provider as string | null) ?? null,
+    mobile_money_number: maybeDecrypt(d.mobile_money_number as string | null),
+  };
 }
 
 export async function linkTelegramAccount(
@@ -161,15 +212,16 @@ export async function saveInvoice(params: {
 
   const invoiceId = invoice.id as string;
 
-  const { error: itemError } = await supabase.from("invoice_items").insert({
+  const itemRows = fields.items.map((item) => ({
     invoice_id: invoiceId,
-    description: fields.description,
-    quantity: 1,
-    unit_price: totals.subtotal,
-    amount: totals.subtotal,
-  });
+    description: item.description,
+    quantity: item.quantity ?? 1,
+    unit_price: Number(item.amount.toFixed(2)),
+    amount: Number((item.amount * (item.quantity ?? 1)).toFixed(2)),
+  }));
 
-  if (itemError) throw new Error(`Failed to insert invoice item: ${itemError.message}`);
+  const { error: itemError } = await supabase.from("invoice_items").insert(itemRows);
+  if (itemError) throw new Error(`Failed to insert invoice items: ${itemError.message}`);
 
   const storagePath = `${businessId}/${invoiceId}.pdf`;
   const { error: uploadError } = await supabase.storage

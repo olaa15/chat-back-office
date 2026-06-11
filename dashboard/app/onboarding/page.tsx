@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/brand";
+import { COUNTRY_LIST, getCountryFormat } from "@/lib/countryFormats";
 import {
   checkTelegramLinked,
   createBusiness,
@@ -17,6 +18,16 @@ const STAGES = [
   "Complete profile",
   "Connect Telegram",
   "You're live!",
+];
+
+const CURRENCY_OPTIONS = [
+  { value: "GBP", label: "GBP — British Pound (£)" },
+  { value: "USD", label: "USD — US Dollar ($)" },
+  { value: "EUR", label: "EUR — Euro (€)" },
+  { value: "NGN", label: "NGN — Nigerian Naira (₦)" },
+  { value: "GHS", label: "GHS — Ghanaian Cedi (₵)" },
+  { value: "CAD", label: "CAD — Canadian Dollar (CA$)" },
+  { value: "AUD", label: "AUD — Australian Dollar (A$)" },
 ];
 
 function CheckIcon() {
@@ -64,10 +75,13 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [businessId, setBusinessId] = useState<string>("");
+  const [country, setCountry] = useState<string>("GB");
   const [connectCode, setConnectCode] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const countryFormat = getCountryFormat(country);
 
   useEffect(() => {
     // Auto-advance past stage 1 after 1.5s
@@ -96,10 +110,12 @@ export default function OnboardingPage() {
     setError(null);
     const fd = new FormData(e.currentTarget);
     const vatRateRaw = Number(fd.get("vatRate"));
+    const selectedCountry = fd.get("country") as string;
     const result = await createBusiness({
       name: fd.get("name") as string,
       currency: fd.get("currency") as string,
       address: fd.get("address") as string,
+      country: selectedCountry || "GB",
       vatRate: Number.isFinite(vatRateRaw) ? Math.min(Math.max(vatRateRaw, 0), 100) : 0,
     });
     if (!result.ok) {
@@ -131,10 +147,21 @@ export default function OnboardingPage() {
       logoUrl = logoResult.data;
     }
 
-    const profileResult = await updateBusinessProfile(businessId, {
-      bankName: fd.get("bankName") as string,
-      bankAccountName: fd.get("bankAccountName") as string,
-      bankAccountNumber: fd.get("bankAccountNumber") as string,
+    const profileResult = await updateBusinessProfile(businessId, country, {
+      bankName: (fd.get("bank_name") as string) || undefined,
+      bankAccountName: (fd.get("bank_account_name") as string) || undefined,
+      bankAccountNumber: (fd.get("bank_account_number") as string) || undefined,
+      bankSortCode: (fd.get("bank_sort_code") as string) || undefined,
+      bankRoutingNumber: (fd.get("bank_routing_number") as string) || undefined,
+      bankAccountType: (fd.get("bank_account_type") as string) || undefined,
+      bankInstitutionNo: (fd.get("bank_institution_no") as string) || undefined,
+      bankTransitNo: (fd.get("bank_transit_no") as string) || undefined,
+      bankBsb: (fd.get("bank_bsb") as string) || undefined,
+      bankBranchCode: (fd.get("bank_branch_code") as string) || undefined,
+      bankIban: (fd.get("bank_iban") as string) || undefined,
+      bankSwiftBic: (fd.get("bank_swift_bic") as string) || undefined,
+      mobileMoneyProvider: (fd.get("mobile_money_provider") as string) || undefined,
+      mobileMoneyNumber: (fd.get("mobile_money_number") as string) || undefined,
       logoUrl: logoUrl ?? undefined,
     });
     if (!profileResult.ok) {
@@ -210,12 +237,33 @@ export default function OnboardingPage() {
               <input name="name" required className={inputCls} placeholder="Acme Ltd" />
             </div>
             <div>
+              <label className={labelCls}>Country</label>
+              <select
+                name="country"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className={inputCls}
+              >
+                {COUNTRY_LIST.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className={labelCls}>Currency</label>
-              <select name="currency" defaultValue="GBP" className={inputCls}>
-                <option value="GBP">GBP — British Pound (£)</option>
-                <option value="USD">USD — US Dollar ($)</option>
-                <option value="EUR">EUR — Euro (€)</option>
-                <option value="NGN">NGN — Nigerian Naira (₦)</option>
+              <select
+                name="currency"
+                defaultValue={countryFormat.defaultCurrency}
+                className={inputCls}
+                key={countryFormat.defaultCurrency}
+              >
+                {CURRENCY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -264,18 +312,27 @@ export default function OnboardingPage() {
                 className="w-full text-sm text-ink-muted"
               />
             </div>
-            <div>
-              <label className={labelCls}>Bank name</label>
-              <input name="bankName" className={inputCls} placeholder="Barclays" />
-            </div>
-            <div>
-              <label className={labelCls}>Account name</label>
-              <input name="bankAccountName" className={inputCls} placeholder="Acme Ltd" />
-            </div>
-            <div>
-              <label className={labelCls}>Account number</label>
-              <input name="bankAccountNumber" className={inputCls} placeholder="12345678" />
-            </div>
+
+            <p className="text-xs font-semibold uppercase tracking-widest text-ink-faint pt-2">
+              Bank details (optional)
+            </p>
+            {countryFormat.bankFields.map((field) => (
+              <div key={field.key}>
+                <label className={labelCls}>{field.label}</label>
+                {field.type === "select" && field.options ? (
+                  <select name={field.key} className={inputCls}>
+                    {field.options.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt || "— none —"}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input name={field.key} className={inputCls} placeholder="" />
+                )}
+              </div>
+            ))}
+
             <button type="submit" disabled={loading} className={btnCls}>
               {loading ? "Saving…" : "Continue →"}
             </button>

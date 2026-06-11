@@ -18,7 +18,7 @@ import {
   writeAuditLog,
 } from "../db/queries";
 import { createCheckoutSession } from "../payments/stripe";
-import { computeInvoiceTotals, InvoiceTotals } from "../invoices/calc";
+import { computeInvoiceTotalsFromItems, InvoiceTotals } from "../invoices/calc";
 import { generateInvoicePdf } from "../invoices/generate";
 import { extractExpenseFromImage, extractIntent, IntentResult } from "../llm/extract";
 import { ExpenseFields, InvoiceFields, PaymentFields } from "../llm/tools";
@@ -32,17 +32,25 @@ function formatCurrency(amount: number, currency: string): string {
 }
 
 function formatConfirmation(fields: InvoiceFields, totals: InvoiceTotals): string {
-  const amountLines = totals.vatRate > 0
-    ? `Amount: ${formatCurrency(totals.subtotal, fields.currency)}\n` +
-      `VAT (${totals.vatRate}%): ${formatCurrency(totals.tax, fields.currency)}\n` +
-      `Total: ${formatCurrency(totals.total, fields.currency)}\n`
-    : `Amount: ${formatCurrency(totals.subtotal, fields.currency)}\n`;
+  const itemLines = fields.items
+    .map((item) => {
+      const qty = item.quantity && item.quantity !== 1 ? ` ×${item.quantity}` : "";
+      return `  • ${item.description}${qty}: ${formatCurrency(item.amount * (item.quantity ?? 1), fields.currency)}`;
+    })
+    .join("\n");
+
+  const totalsLines =
+    totals.vatRate > 0
+      ? `Subtotal: ${formatCurrency(totals.subtotal, fields.currency)}\n` +
+        `VAT (${totals.vatRate}%): ${formatCurrency(totals.tax, fields.currency)}\n` +
+        `Total: ${formatCurrency(totals.total, fields.currency)}`
+      : `Total: ${formatCurrency(totals.total, fields.currency)}`;
 
   return (
     `Here's what I've got:\n\n` +
     `Client: ${fields.client_name}\n` +
-    amountLines +
-    `Description: ${fields.description}\n` +
+    `Items:\n${itemLines}\n\n` +
+    totalsLines + "\n" +
     `Currency: ${fields.currency}\n` +
     `Due date: ${fields.due_date ?? "(not set)"}\n\n` +
     `Reply yes to create this invoice, or send a new message to start over.`
@@ -109,7 +117,7 @@ async function handleInvoiceConfirmation(
       invoiceId,
       businessId,
       invoiceNumber,
-      description: fields.description,
+      description: fields.items.map((i) => i.description).join(", "),
       amount: totals.total,
       currency: fields.currency,
     });
@@ -209,9 +217,98 @@ export async function handleReceiptImage(
   await channel.sendText(formatExpenseConfirmation(expense));
 }
 
+/**
+ * Resolve a user's due-date reply to a YYYY-MM-DD string.
+ * Tries simple patterns first to avoid an extra LLM call; falls back to
+ * extractIntent only for complex expressions the patterns can't cover.
+ */
+async function resolveDueDate(
+  text: string,
+  anthropic: Anthropic
+): Promise<string | null> {
+  const trimmed = text.trim();
+
+  // ISO date already
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) return trimmed;
+  }
+
+  // "in N days/weeks"
+  const inMatch = trimmed.match(/^in\s+(\d+)\s+(day|days|week|weeks)$/i);
+  if (inMatch) {
+    const n = parseInt(inMatch[1]);
+    const unit = inMatch[2].toLowerCase().startsWith("w") ? n * 7 : n;
+    const d = new Date();
+    d.setDate(d.getDate() + unit);
+    return d.toISOString().split("T")[0];
+  }
+
+  // Month name + day, e.g. "30 June", "June 30", "30 Jun"
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split("T")[0];
+  }
+
+  // Fall back to LLM for complex cases ("end of month", "next Friday", etc.)
+  try {
+    const { extractIntent } = await import("../llm/extract");
+    const result = await extractIntent(`due date: ${trimmed}`, anthropic, "GBP");
+    if (result.intent === "create_invoice" && result.data.due_date) {
+      return result.data.due_date;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
 export async function handleBotMessage(channel: BotChannel, text: string, channelType: "telegram" | "whatsapp" = "telegram"): Promise<void> {
   const userId = channel.userId;
+
+  // ── Global cancel — must come before connect-code check ─────────────────
+  if (/^(cancel|stop|start over|reset|nevermind|never mind)$/i.test(text.trim())) {
+    await resetState(userId);
+    await channel.sendText("No problem — cancelled. Send me a new request whenever you're ready.");
+    return;
+  }
+
+  // ── Connect code — always intercept before state checks ──────────────────
+  if (/^[A-Z0-9]{6}$/i.test(text.trim())) {
+    const linked = channelType === "whatsapp"
+      ? await linkWhatsAppAccount(text.trim(), userId)
+      : await linkTelegramAccount(text.trim(), Number(userId));
+
+    if (linked) {
+      await resetState(userId);
+      await channel.sendText(
+        "Your account is now linked to your business! You're ready to go.\n\nTry: \"Generate an invoice for ABC Company for £500 consulting services\""
+      );
+    } else {
+      await channel.sendText(
+        "That code didn't work — it may have expired (codes last 15 minutes) or been entered incorrectly.\n\nGo back to the dashboard and click Continue to get a fresh code."
+      );
+    }
+    return;
+  }
+
   const current = await getState(userId);
+
+  // ── Due-date collection ──────────────────────────────────────────────────
+  if (current.stage === "awaiting_due_date") {
+    await channel.sendTyping();
+    const resolvedDate = await resolveDueDate(text, anthropic);
+    if (!resolvedDate) {
+      await channel.sendText("Sorry, I couldn't parse that date. Please try again, e.g. '30 June', 'in 14 days', or '2026-06-30'.\n\nOr type 'cancel' to start over.");
+      return;
+    }
+    const updatedFields = { ...current.fields, due_date: resolvedDate };
+    const totals = computeInvoiceTotalsFromItems(updatedFields.items, current.businessVatRate);
+    await setState(userId, { stage: "awaiting_confirmation", fields: updatedFields, totals });
+    await channel.sendText(formatConfirmation(updatedFields, totals));
+    return;
+  }
 
   // ── Confirmation stages ──────────────────────────────────────────────────
   if (
@@ -244,7 +341,7 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
     } else if (claimed.stage === "awaiting_payment_confirmation") {
       const invoice = await findInvoiceByNumber(businessId, claimed.payment.invoice_number);
       await handlePaymentConfirmation(channel, claimed.payment, claimed.invoiceId, invoice?.total ?? claimed.payment.amount, businessId);
-    } else {
+    } else if (claimed.stage === "awaiting_expense_confirmation") {
       const imageBuffer = Buffer.from(claimed.imageBufferB64, "base64");
       await handleExpenseConfirmation(channel, claimed.expense, imageBuffer, claimed.mimeType, businessId);
     }
@@ -252,24 +349,6 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
   }
 
   // ── Idle: extract intent ─────────────────────────────────────────────────
-
-  // Intercept onboarding connect codes (6 alphanumeric chars) before Claude
-  if (/^[A-Z0-9]{6}$/i.test(text)) {
-    const linked = channelType === "whatsapp"
-      ? await linkWhatsAppAccount(text, userId)
-      : await linkTelegramAccount(text, Number(userId));
-
-    if (linked) {
-      await channel.sendText(
-        "Your account is now linked to your business! You're ready to go.\n\nTry: \"Generate an invoice for ABC Company for £500 consulting services\""
-      );
-    } else {
-      await channel.sendText(
-        "That code didn't work — it may have expired (codes last 15 minutes) or been entered incorrectly.\n\nGo back to the dashboard and click Continue to get a fresh code."
-      );
-    }
-    return;
-  }
 
   const businessId = channelType === "whatsapp"
     ? await getBusinessForWhatsAppUser(userId)
@@ -294,11 +373,17 @@ export async function handleBotMessage(channel: BotChannel, text: string, channe
 
     case "create_invoice": {
       const { data } = result;
-      if (!Number.isFinite(data.amount) || data.amount <= 0) {
-        await channel.sendText("I couldn't confirm the invoice amount. Could you provide a clear number?");
+      if (!data.items?.length || data.items.some((i) => !Number.isFinite(i.amount) || i.amount <= 0)) {
+        await channel.sendText("I couldn't confirm the invoice amount(s). Could you provide clear numbers?");
         return;
       }
-      const totals = computeInvoiceTotals(data.amount, data.vat_rate ?? business?.vat_rate ?? 0);
+      const businessVatRate = data.vat_rate ?? business?.vat_rate ?? 0;
+      if (!data.due_date) {
+        await setState(userId, { stage: "awaiting_due_date", fields: data, businessVatRate });
+        await channel.sendText("When is this invoice due? (e.g. 30 June, in 14 days, end of month)");
+        return;
+      }
+      const totals = computeInvoiceTotalsFromItems(data.items, businessVatRate);
       await setState(userId, { stage: "awaiting_confirmation", fields: data, totals });
       await channel.sendText(formatConfirmation(data, totals));
       break;
