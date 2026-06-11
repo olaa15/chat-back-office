@@ -2,11 +2,12 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { OverviewIcon, InvoiceIcon } from "@/components/icons";
+import { OverviewIcon, InvoiceIcon, SettingsIcon } from "@/components/icons";
 
 const ITEMS = [
   { href: "/dashboard", label: "Overview", Icon: OverviewIcon, exact: true },
   { href: "/dashboard/invoices", label: "Invoices", Icon: InvoiceIcon, exact: false },
+  { href: "/dashboard/settings", label: "Settings", Icon: SettingsIcon, exact: false },
 ];
 
 export default function Nav() {
