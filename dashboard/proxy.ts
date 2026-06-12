@@ -35,8 +35,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Logged in but no business → redirect to onboarding
-  if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
+  // Logged in but no business → redirect to onboarding (skip for admin)
+  const isAdmin = user?.email === process.env.ADMIN_EMAIL;
+  if (user && !isAdmin && request.nextUrl.pathname.startsWith("/dashboard")) {
     const { count } = await supabase
       .from("business_members")
       .select("*", { count: "exact", head: true })
@@ -47,6 +48,13 @@ export async function proxy(request: NextRequest) {
       url.pathname = "/onboarding";
       return NextResponse.redirect(url);
     }
+  }
+
+  // Admin with no business → send straight to /admin
+  if (user && isAdmin && request.nextUrl.pathname === "/dashboard") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    return NextResponse.redirect(url);
   }
 
   return supabaseResponse;

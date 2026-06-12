@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { getServerClient } from '@/lib/supabase-server'
 import { adminClient } from '@/lib/supabase-admin'
 import { AdminTabs, type AdminTab } from './AdminTabs'
+import { AdminSignOutBtn } from './AdminSignOutBtn'
 import { DeleteBusinessBtn } from './DeleteBusinessBtn'
 import { ImpersonateBtn } from './ImpersonateBtn'
 
@@ -385,7 +386,10 @@ export default async function AdminPage({
   return (
     <div className="min-h-screen bg-bg px-6 py-10">
       <div className="mx-auto max-w-6xl">
-        <h1 className="font-display text-3xl font-semibold text-ink mb-1">Admin</h1>
+        <div className="flex items-start justify-between mb-1">
+          <h1 className="font-display text-3xl font-semibold text-ink">Admin</h1>
+          <AdminSignOutBtn />
+        </div>
         <p className="text-sm text-ink-muted mb-6">All businesses on Ordeva</p>
 
         <Suspense>
