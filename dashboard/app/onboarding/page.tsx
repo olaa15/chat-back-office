@@ -345,18 +345,28 @@ export default function OnboardingPage() {
             <h2 className="font-display text-xl font-semibold text-ink mb-2">
               Connect Telegram
             </h2>
-            <p className="text-sm text-ink-muted mb-6">
-              Open Telegram, find your bot, and send this code:
+            <p className="text-sm text-ink-muted mb-2">
+              Open Telegram and search for{" "}
+              <a
+                href="https://t.me/mybackofficeuk_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-brand underline underline-offset-2"
+              >
+                @mybackofficeuk_bot
+              </a>
+              , then send this code:
             </p>
-            <div className="rounded-xl border border-brand/20 bg-brand-soft p-6 text-center mb-6">
+            <div className="rounded-xl border border-brand/20 bg-brand-soft p-6 text-center mb-4">
               <p className="font-mono text-4xl font-bold tracking-widest text-brand-ink">
                 {connectCode}
               </p>
+              <p className="mt-2 text-xs text-ink-faint">Expires in 15 minutes</p>
             </div>
-            <p className="text-xs text-ink-faint text-center">
+            <p className="text-xs text-ink-faint text-center mb-3">
               Waiting for you to send the code in Telegram…
             </p>
-            <div className="mt-4 flex justify-center">
+            <div className="mb-4 flex justify-center">
               <div className="flex gap-1.5">
                 {[0, 1, 2].map((i) => (
                   <div
@@ -366,6 +376,23 @@ export default function OnboardingPage() {
                   />
                 ))}
               </div>
+            </div>
+            <div className="text-center">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={async () => {
+                  setLoading(true);
+                  setError(null);
+                  const result = await generateConnectCode(businessId);
+                  if (result.ok) setConnectCode(result.data);
+                  else setError(result.error);
+                  setLoading(false);
+                }}
+                className="text-xs text-ink-faint underline underline-offset-2 hover:text-ink transition-colors disabled:opacity-50"
+              >
+                {loading ? "Generating…" : "Code expired? Get a new one"}
+              </button>
             </div>
           </div>
         )}

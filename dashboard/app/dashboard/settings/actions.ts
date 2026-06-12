@@ -1,9 +1,35 @@
 "use server";
 
+import crypto from "node:crypto";
 import { adminClient } from "@/lib/supabase-admin";
 import { getServerClient } from "@/lib/supabase-server";
 import { encryptField } from "@/lib/crypto";
 import { getCountryFormat } from "@/lib/countryFormats";
+
+const CONNECT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CONNECT_CODE_TTL_MINUTES = 15;
+
+function generateCode(): string {
+  let code = "";
+  for (let i = 0; i < 6; i++) code += CONNECT_CODE_ALPHABET[crypto.randomInt(CONNECT_CODE_ALPHABET.length)];
+  return code;
+}
+
+export async function generateTelegramCode(): Promise<ActionResult<string>> {
+  try {
+    const { businessId } = await requireMembership();
+    const code = generateCode();
+    const expiresAt = new Date(Date.now() + CONNECT_CODE_TTL_MINUTES * 60 * 1000).toISOString();
+    const { error } = await adminClient
+      .from("businesses")
+      .update({ connect_code: code, connect_code_expires_at: expiresAt })
+      .eq("id", businessId);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, data: code };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
 
 type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };
 

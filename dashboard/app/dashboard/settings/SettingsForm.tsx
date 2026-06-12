@@ -1,9 +1,8 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import Image from "next/image";
 import { COUNTRY_LIST, getCountryFormat } from "@/lib/countryFormats";
-import { saveBusinessSettings, uploadSettingsLogo } from "./actions";
+import { saveBusinessSettings, uploadSettingsLogo, generateTelegramCode } from "./actions";
 
 const CURRENCY_OPTIONS = [
   { value: "GBP", label: "GBP — British Pound (£)" },
@@ -37,6 +36,9 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [telegramCode, setTelegramCode] = useState<string | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramError, setTelegramError] = useState<string | null>(null);
   const countryFormat = getCountryFormat(country);
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -199,6 +201,39 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
             )}
           </div>
         ))}
+      </section>
+
+      {/* Telegram reconnect */}
+      <section className="rounded-xl border border-line bg-surface p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-ink-faint">Telegram</h2>
+          <p className="mt-1 text-xs text-ink-faint">
+            Need to reconnect or link a new Telegram account? Generate a fresh code and send it to{" "}
+            <a href="https://t.me/mybackofficeuk_bot" target="_blank" rel="noopener noreferrer" className="text-brand underline underline-offset-2">@mybackofficeuk_bot</a>.
+          </p>
+        </div>
+        {telegramCode ? (
+          <div className="rounded-xl border border-brand/20 bg-brand-soft p-4 text-center">
+            <p className="font-mono text-3xl font-bold tracking-widest text-brand-ink">{telegramCode}</p>
+            <p className="mt-1 text-xs text-ink-faint">Send this to @mybackofficeuk_bot · expires in 15 minutes</p>
+          </div>
+        ) : null}
+        {telegramError && <p className="text-sm text-overdue-fg">{telegramError}</p>}
+        <button
+          type="button"
+          disabled={telegramLoading}
+          onClick={async () => {
+            setTelegramLoading(true);
+            setTelegramError(null);
+            const result = await generateTelegramCode();
+            if (result.ok) setTelegramCode(result.data);
+            else setTelegramError(result.error);
+            setTelegramLoading(false);
+          }}
+          className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-ink-faint/5 disabled:opacity-50 transition-colors"
+        >
+          {telegramLoading ? "Generating…" : telegramCode ? "Generate new code" : "Generate connect code"}
+        </button>
       </section>
 
       {state && !state.ok && (
