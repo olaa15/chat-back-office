@@ -18,6 +18,7 @@ import {
   writeAuditLog,
 } from "../db/queries";
 import { createCheckoutSession } from "../payments/stripe";
+import { getBusinessPaymentInfo } from "../payments/details";
 import { computeInvoiceTotalsFromItems, InvoiceTotals } from "../invoices/calc";
 import { generateInvoicePdf } from "../invoices/generate";
 import { extractExpenseFromImage, extractIntent, IntentResult } from "../llm/extract";
@@ -112,27 +113,45 @@ async function handleInvoiceConfirmation(
     },
   });
 
+  const { method, payment } = await getBusinessPaymentInfo(businessId);
+
   let paymentUrl: string | null = null;
-  try {
-    const session = await createCheckoutSession({
-      invoiceId,
-      businessId,
-      invoiceNumber,
-      description: fields.items.map((i) => i.description).join(", "),
-      amount: totals.total,
-      currency: fields.currency,
-    });
-    await updateInvoiceStripeData(invoiceId, session.url, session.sessionId);
-    paymentUrl = session.url;
-  } catch (err) {
-    console.error("Stripe checkout session failed (invoice still created):", err);
+  if (method === "stripe" || method === "both") {
+    try {
+      const session = await createCheckoutSession({
+        invoiceId,
+        businessId,
+        invoiceNumber,
+        description: fields.items.map((i) => i.description).join(", "),
+        amount: totals.total,
+        currency: fields.currency,
+      });
+      await updateInvoiceStripeData(invoiceId, session.url, session.sessionId);
+      paymentUrl = session.url;
+    } catch (err) {
+      console.error("Stripe checkout failed (invoice still created):", err);
+    }
   }
 
-  const caption = paymentUrl
-    ? `Here's your invoice ${invoiceNumber}.\n\nShare this with your client — you'll be notified when they pay.`
-    : `Here's your invoice ${invoiceNumber}. Ready to send!`;
+  const money = new Intl.NumberFormat("en-GB", { style: "currency", currency: fields.currency })
+    .format(totals.total);
+  const lines = [`Here's invoice ${invoiceNumber} for ${money}.`];
 
-  await channel.sendDocument(pdfBuffer, `${invoiceNumber}.pdf`, storagePath, caption, paymentUrl ?? undefined);
+  if (method === "bank_transfer" || method === "both") {
+    if (payment.length > 0) {
+      lines.push("", "To pay by bank transfer:");
+      for (const p of payment) lines.push(`${p.label}: ${p.value}`);
+      lines.push(`Reference: ${invoiceNumber}`);
+      lines.push("", `When it lands, tell me "${invoiceNumber} paid" and I'll mark it off.`);
+    } else {
+      lines.push("", "Add your bank details in the dashboard so they show here and on the invoice.");
+    }
+  }
+  if (paymentUrl) lines.push("", "Or pay by card using the button below.");
+
+  await channel.sendDocument(
+    pdfBuffer, `${invoiceNumber}.pdf`, storagePath, lines.join("\n"), paymentUrl ?? undefined
+  );
 }
 
 async function handlePaymentConfirmation(
