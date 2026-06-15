@@ -1,7 +1,10 @@
 node_modules/
 dist/
 .env
+.env.local
 *.pdf
+*.zip
+.next/
 .trigger/
 .claude/
 dashboard/.next/
