@@ -131,7 +131,7 @@ app.post("/whatsapp-webhook", (req: Request & { rawBody?: Buffer }, res) => {
   if (msg.type === "text") {
     const text = (msg.text?.body as string)?.trim();
     if (!text) return;
-    handleBotMessage(channel, text, "whatsapp").catch((err) =>
+    handleBotMessage(channel, text, "whatsapp", msg.id).catch((err) =>
       console.error("WhatsApp handler error:", err)
     );
     return;

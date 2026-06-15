@@ -23,6 +23,7 @@ import { generateInvoicePdf } from "../invoices/generate";
 import { extractExpenseFromImage, extractIntent, IntentResult } from "../llm/extract";
 import { ExpenseFields, InvoiceFields, PaymentFields } from "../llm/tools";
 import { claimState, getState, resetState, setState } from "./state";
+import { claimMessage } from "./dedupe";
 import { BotChannel } from "./channel";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -264,7 +265,15 @@ async function resolveDueDate(
   return null;
 }
 
-export async function handleBotMessage(channel: BotChannel, text: string, channelType: "telegram" | "whatsapp" = "telegram"): Promise<void> {
+export async function handleBotMessage(
+  channel: BotChannel,
+  text: string,
+  channelType: "telegram" | "whatsapp" = "telegram",
+  messageId?: string
+): Promise<void> {
+  // Skip webhook re-deliveries: the same provider message id is processed once.
+  if (messageId && !(await claimMessage(channelType, messageId))) return;
+
   const userId = channel.userId;
 
   // ── Global cancel — must come before connect-code check ─────────────────
