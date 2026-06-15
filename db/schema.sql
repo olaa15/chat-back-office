@@ -376,3 +376,28 @@ alter table public.businesses
   add column if not exists bank_swift_bic        text,   -- international (plain)
   add column if not exists mobile_money_provider text,   -- NG/GH (plain)
   add column if not exists mobile_money_number   text;   -- NG/GH (encrypted)
+
+-- =============================================================
+-- Phase 3 — inbound-message de-duplication
+-- Telegram/WhatsApp re-deliver the same webhook on timeout/non-200.
+-- The (channel, message_id) primary key is the lock: a duplicate
+-- insert fails with unique-violation 23505, read as "already processed".
+-- =============================================================
+
+create table if not exists public.processed_messages (
+  channel    text not null,                 -- 'telegram' | 'whatsapp'
+  message_id text not null,                 -- Telegram update_id / WhatsApp message id
+  created_at timestamptz not null default now(),
+  primary key (channel, message_id)
+);
+
+create index if not exists processed_messages_created_at_idx
+  on public.processed_messages (created_at);
+
+-- Only the service-role bot touches this table; RLS on with no policy denies
+-- anon/authenticated access (service_role bypasses RLS).
+alter table public.processed_messages enable row level security;
+
+-- Optional housekeeping (schedule via Trigger.dev or pg_cron): rows are useless
+-- once past any realistic retry window.
+-- delete from public.processed_messages where created_at < now() - interval '7 days';

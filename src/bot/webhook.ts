@@ -27,7 +27,7 @@ export function createBot(token: string): Bot {
   bot.on("message:text", async (ctx) => {
     const text = ctx.message.text.trim();
     const channel = new TelegramChannel(ctx);
-    await handleBotMessage(channel, text, "telegram");
+    await handleBotMessage(channel, text, "telegram", String(ctx.update.update_id));
   });
 
   bot.on("message:photo", async (ctx) => {
