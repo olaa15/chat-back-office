@@ -43,11 +43,9 @@ jobs:
       - run: npm ci
       - name: Build
         run: npm run build
-        # If next build needs public keys at build time, add them as repo
-        # secrets and surface them here, e.g.:
-        # env:
-        #   NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-        #   NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
   # The regression gate: run the extraction eval set. Any failing case fails
   # the build (the runner already exits non-zero), so no prompt/tool change
