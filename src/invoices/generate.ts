@@ -66,9 +66,12 @@ export async function generateInvoicePdf(
 
   try {
     const page = await browser.newPage();
-    const html = buildInvoiceHtml(data);
-    await page.goto(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`, { waitUntil: "networkidle0" });
-    await page.evaluateHandle("document.fonts.ready");
+    await page.setContent(buildInvoiceHtml(data), { waitUntil: "load" });
+    // Wait for webfonts (Fraunces / Hanken Grotesk) to finish loading before
+    // capturing the PDF. document.fonts.ready always resolves — even when the
+    // network is unavailable — so this degrades cleanly to Georgia/system fonts.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await page.evaluate(() => (globalThis as any).document.fonts.ready);
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
