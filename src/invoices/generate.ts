@@ -66,7 +66,9 @@ export async function generateInvoicePdf(
 
   try {
     const page = await browser.newPage();
-    await page.setContent(buildInvoiceHtml(data), { waitUntil: "load" });
+    const html = buildInvoiceHtml(data);
+    await page.goto(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`, { waitUntil: "networkidle0" });
+    await page.evaluateHandle("document.fonts.ready");
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
