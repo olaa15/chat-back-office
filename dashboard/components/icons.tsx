@@ -69,6 +69,12 @@ export const StackIcon = ({ className, size = 18 }: P) => (
   </svg>
 );
 
+export const ShieldIcon = ({ className, size = 18 }: P) => (
+  <svg {...base(size)} className={className} aria-hidden>
+    <path d="M12 3 4 7v5c0 5 3.6 9.7 8 11 4.4-1.3 8-6 8-11V7l-8-4Z" />
+  </svg>
+);
+
 export const SettingsIcon = ({ className, size = 18 }: P) => (
   <svg {...base(size)} className={className} aria-hidden>
     <circle cx="12" cy="12" r="3" />

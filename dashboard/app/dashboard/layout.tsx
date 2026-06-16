@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Logo } from "@/components/brand";
 import Nav from "./Nav";
 import SignOutButton from "./SignOutButton";
+import { MfaBanner } from "./MfaBanner";
 
 export default async function DashboardLayout({
   children,
@@ -52,6 +53,7 @@ export default async function DashboardLayout({
       {/* Main */}
       <div className="flex min-h-screen flex-col">
         <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 sm:px-8 sm:py-10">
+          <MfaBanner />
           {children}
         </main>
       </div>
