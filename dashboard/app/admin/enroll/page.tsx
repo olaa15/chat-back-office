@@ -72,7 +72,7 @@ export default function EnrollMfa() {
         <button
           onClick={verify}
           disabled={busy || code.length !== 6 || !factorId}
-          className="rounded-lg bg-ink text-bg px-4 py-2 text-sm font-semibold disabled:opacity-50 transition-opacity"
+          className="rounded-lg px-4 py-2 text-sm font-semibold transition-colors enabled:bg-ink enabled:text-bg disabled:bg-line disabled:text-ink-faint"
         >
           {busy ? 'Verifying…' : 'Verify & continue'}
         </button>
