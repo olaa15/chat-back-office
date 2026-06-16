@@ -331,6 +331,11 @@ export default async function AdminPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || user.email !== process.env.ADMIN_EMAIL) redirect('/dashboard')
 
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  if (aal?.currentLevel !== 'aal2') {
+    redirect(aal?.nextLevel === 'aal2' ? '/admin/verify' : '/admin/enroll')
+  }
+
   const { tab } = await searchParams
   const activeTab: AdminTab =
     tab === 'businesses' || tab === 'users' ? tab : 'overview'

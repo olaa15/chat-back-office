@@ -11,7 +11,8 @@
     "trigger:dev": "npx trigger.dev@latest dev",
     "trigger:deploy": "npx trigger.dev@latest deploy",
     "test:rls": "ts-node --transpile-only scripts/rls-leakage-test.ts",
-    "test:replay": "ts-node --transpile-only scripts/replay-test.ts"
+    "test:replay": "ts-node --transpile-only scripts/replay-test.ts",
+    "reset-admin-mfa": "ts-node --transpile-only scripts/reset-admin-mfa.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
