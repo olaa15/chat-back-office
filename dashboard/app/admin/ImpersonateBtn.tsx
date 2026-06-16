@@ -4,16 +4,19 @@ import { getImpersonateLinkAction } from './actions'
 
 export function ImpersonateBtn({ email }: { email: string }) {
   const [pending, startTransition] = useTransition()
+  const [confirming, setConfirming] = useState(false)
   const [link, setLink] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  function generate() {
+  function confirm() {
     startTransition(async () => {
       try {
         const url = await getImpersonateLinkAction(email)
         setLink(url)
+        setConfirming(false)
       } catch {
         alert('Failed to generate login link.')
+        setConfirming(false)
       }
     })
   }
@@ -46,13 +49,33 @@ export function ImpersonateBtn({ email }: { email: string }) {
     )
   }
 
+  if (confirming) {
+    return (
+      <span className="flex items-center gap-2">
+        <span className="text-xs text-ink-muted">Impersonate {email}?</span>
+        <button
+          disabled={pending}
+          onClick={confirm}
+          className="text-xs font-medium text-amber-600 hover:text-amber-700 disabled:opacity-50"
+        >
+          {pending ? 'Generating…' : 'Yes, generate link'}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          className="text-xs text-ink-muted hover:text-ink"
+        >
+          Cancel
+        </button>
+      </span>
+    )
+  }
+
   return (
     <button
-      disabled={pending}
-      onClick={generate}
-      className="text-xs text-ink-muted hover:text-ink transition-colors disabled:opacity-50"
+      onClick={() => setConfirming(true)}
+      className="text-xs text-ink-muted hover:text-amber-600 transition-colors"
     >
-      {pending ? 'Generating…' : 'Impersonate'}
+      Impersonate
     </button>
   )
 }

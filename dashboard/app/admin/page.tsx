@@ -5,7 +5,7 @@ import { adminClient } from '@/lib/supabase-admin'
 import { AdminTabs, type AdminTab } from './AdminTabs'
 import { AdminSignOutBtn } from './AdminSignOutBtn'
 import { DeleteBusinessBtn } from './DeleteBusinessBtn'
-import { ImpersonateBtn } from './ImpersonateBtn'
+import { UsersTable } from './UsersTable'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -317,55 +317,7 @@ async function BusinessesTab() {
 
 async function UsersTab() {
   const users = await fetchUsers()
-
-  return (
-    <div className="rounded-xl border border-line bg-surface overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-line bg-ink-faint/5">
-            {['Email', 'Business', 'Confirmed', 'Last sign-in', 'Joined', 'Actions'].map((h) => (
-              <Th key={h}>{h}</Th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} className="border-b border-line last:border-0 hover:bg-ink-faint/5 transition-colors">
-              <Td className="font-medium text-ink">{u.email}</Td>
-              <Td className="text-ink-muted">{u.business}</Td>
-              <Td>
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                    u.confirmed ? 'bg-paid-bg text-paid-fg' : 'bg-sent-bg text-sent-fg'
-                  }`}
-                >
-                  {u.confirmed ? 'Verified' : 'Unverified'}
-                </span>
-              </Td>
-              <Td className="text-ink-faint text-xs">
-                {u.lastSignIn
-                  ? new Date(u.lastSignIn).toLocaleDateString('en-GB')
-                  : 'Never'}
-              </Td>
-              <Td className="text-ink-faint text-xs">
-                {new Date(u.createdAt).toLocaleDateString('en-GB')}
-              </Td>
-              <Td>
-                {u.email !== '—' && <ImpersonateBtn email={u.email} />}
-              </Td>
-            </tr>
-          ))}
-          {users.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-sm">
-                No users found.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
+  return <UsersTable users={users} />
 }
 
 // ─── page ────────────────────────────────────────────────────────────────────
