@@ -68,10 +68,10 @@ export function UsersTable({ users }: { users: UserRow[] }) {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-lg px-3 py-2 text-xs font-medium capitalize transition-colors ${
+              className={`rounded-lg px-3 py-2 text-xs font-medium capitalize transition-colors border ${
                 filter === f
-                  ? 'bg-ink text-bg'
-                  : 'bg-surface border border-line text-ink-muted hover:text-ink'
+                  ? 'bg-ink-faint/15 border-line-strong text-ink'
+                  : 'bg-surface border-line text-ink-muted hover:text-ink'
               }`}
             >
               {f}
