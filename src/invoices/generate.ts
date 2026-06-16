@@ -1,6 +1,6 @@
 import puppeteer from "puppeteer";
-import { getCountryFormat } from "../format/countryFormats";
 import { getBusinessById } from "../db/queries";
+import { getBusinessPaymentInfo } from "../payments/details";
 import { InvoiceFields } from "../llm/tools";
 import { InvoiceTotals } from "./calc";
 import { buildInvoiceHtml, InvoiceData } from "./template";
@@ -13,27 +13,9 @@ export async function generateInvoicePdf(
 ): Promise<Buffer> {
   const business = await getBusinessById(businessId);
   const country = business?.country ?? "GB";
-  const countryFormat = getCountryFormat(country);
 
-  // Build decrypted bank record for the payment-details block
-  const bankRecord: Record<string, string | null> = {
-    bank_name: business?.bank_name ?? null,
-    bank_account_name: business?.bank_account_name ?? null,
-    bank_account_number: business?.bank_account_number ?? null,
-    bank_sort_code: business?.bank_sort_code ?? null,
-    bank_routing_number: business?.bank_routing_number ?? null,
-    bank_account_type: business?.bank_account_type ?? null,
-    bank_institution_no: business?.bank_institution_no ?? null,
-    bank_transit_no: business?.bank_transit_no ?? null,
-    bank_bsb: business?.bank_bsb ?? null,
-    bank_branch_code: business?.bank_branch_code ?? null,
-    bank_iban: business?.bank_iban ?? null,
-    bank_swift_bic: business?.bank_swift_bic ?? null,
-    mobile_money_provider: business?.mobile_money_provider ?? null,
-    mobile_money_number: business?.mobile_money_number ?? null,
-  };
-
-  const payment = countryFormat.formatBankDetails(bankRecord);
+  const { payment } = await getBusinessPaymentInfo(businessId);
+  payment.push({ label: "Reference", value: invoiceNumber });
 
   const data: InvoiceData = {
     invoiceNumber,
@@ -66,9 +48,12 @@ export async function generateInvoicePdf(
 
   try {
     const page = await browser.newPage();
-    const html = buildInvoiceHtml(data);
-    await page.goto(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`, { waitUntil: "networkidle0" });
-    await page.evaluateHandle("document.fonts.ready");
+    await page.setContent(buildInvoiceHtml(data), { waitUntil: "load" });
+    // Wait for webfonts (Fraunces / Hanken Grotesk) to finish loading before
+    // capturing the PDF. document.fonts.ready always resolves — even when the
+    // network is unavailable — so this degrades cleanly to Georgia/system fonts.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await page.evaluate(() => (globalThis as any).document.fonts.ready);
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,

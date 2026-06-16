@@ -35,6 +35,7 @@ export interface BusinessProfile {
   bank_swift_bic: string | null;
   mobile_money_provider: string | null;
   mobile_money_number: string | null;
+  invoice_payment_method: string;
 }
 
 export async function getConnectCode(businessId: string): Promise<string | null> {
@@ -53,7 +54,7 @@ export async function getBusinessById(
   const { data, error } = await supabase
     .from("businesses")
     .select(
-      "name, address, logo_url, currency, vat_rate, country, bank_name, bank_account_name, bank_account_number, bank_sort_code, bank_routing_number, bank_account_type, bank_institution_no, bank_transit_no, bank_bsb, bank_branch_code, bank_iban, bank_swift_bic, mobile_money_provider, mobile_money_number"
+      "name, address, logo_url, currency, vat_rate, country, bank_name, bank_account_name, bank_account_number, bank_sort_code, bank_routing_number, bank_account_type, bank_institution_no, bank_transit_no, bank_bsb, bank_branch_code, bank_iban, bank_swift_bic, mobile_money_provider, mobile_money_number, invoice_payment_method"
     )
     .eq("id", businessId)
     .single();
@@ -82,6 +83,7 @@ export async function getBusinessById(
     bank_swift_bic: (d.bank_swift_bic as string | null) ?? null,
     mobile_money_provider: (d.mobile_money_provider as string | null) ?? null,
     mobile_money_number: maybeDecrypt(d.mobile_money_number as string | null),
+    invoice_payment_method: (d.invoice_payment_method as string | null) ?? "bank_transfer",
   };
 }
 

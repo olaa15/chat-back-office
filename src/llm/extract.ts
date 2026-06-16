@@ -41,6 +41,7 @@ Rules:
 - For create_invoice: if client_name is missing, ask — do not call the tool.
 - Capture each distinct service or product as its own item in the items array with its own price. If the user gives one lump sum for a single service, that is one item.
 - Resolve relative due dates ('in 7 days', 'end of month', 'next Friday') to a concrete YYYY-MM-DD using today's date. Do not leave relative expressions in due_date.
+- due_date is optional for create_invoice — if the user doesn't mention one, call the tool without it; the system will ask the user separately.
 - For record_payment: if invoice_number is missing, ask which invoice. If amount is missing, ask.
 - Only set currency or vat_rate on create_invoice if the user explicitly states them — never invent either. The system applies sensible business defaults when they're omitted.
 - For list_invoices, get_balance, list_expenses, and get_expense_summary, call the tool immediately — no missing fields needed.

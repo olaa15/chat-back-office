@@ -401,3 +401,11 @@ alter table public.processed_messages enable row level security;
 -- Optional housekeeping (schedule via Trigger.dev or pg_cron): rows are useless
 -- once past any realistic retry window.
 -- delete from public.processed_messages where created_at < now() - interval '7 days';
+
+-- =============================================================
+-- Pay-by-bank-transfer — business payment preference
+-- 'bank_transfer' (default) | 'stripe' | 'both'
+-- =============================================================
+
+alter table public.businesses
+  add column if not exists invoice_payment_method text not null default 'bank_transfer';

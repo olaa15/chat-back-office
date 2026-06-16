@@ -107,6 +107,7 @@ export async function createBusiness(data: {
   address: string;
   country: string;
   vatRate?: number;
+  invoicePaymentMethod?: string;
 }): Promise<ActionResult<string>> {
   try {
     const { user } = await requireUser();
@@ -122,6 +123,7 @@ export async function createBusiness(data: {
         address: data.address,
         country: data.country || "GB",
         vat_rate: data.vatRate ?? 0,
+        invoice_payment_method: data.invoicePaymentMethod ?? "bank_transfer",
       })
       .select("id")
       .single();

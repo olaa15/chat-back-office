@@ -76,6 +76,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [businessId, setBusinessId] = useState<string>("");
   const [country, setCountry] = useState<string>("GB");
+  const [paymentMethod, setPaymentMethod] = useState<"bank_transfer" | "stripe" | "both">("bank_transfer");
   const [connectCode, setConnectCode] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +118,7 @@ export default function OnboardingPage() {
       address: fd.get("address") as string,
       country: selectedCountry || "GB",
       vatRate: Number.isFinite(vatRateRaw) ? Math.min(Math.max(vatRateRaw, 0), 100) : 0,
+      invoicePaymentMethod: (fd.get("invoice_payment_method") as string) || "bank_transfer",
     });
     if (!result.ok) {
       setError(result.error);
@@ -291,6 +293,38 @@ export default function OnboardingPage() {
                 placeholder="London, United Kingdom"
               />
             </div>
+            <div>
+              <label className={labelCls}>How do you want to get paid?</label>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {(["bank_transfer", "stripe", "both"] as const).map((m) => {
+                  const labels = { bank_transfer: "Bank transfer", stripe: "Card (Stripe)", both: "Both" };
+                  const active = paymentMethod === m;
+                  return (
+                    <label
+                      key={m}
+                      className={`flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                        active ? "border-brand bg-brand-soft text-brand-ink" : "border-line text-ink-muted hover:border-brand/40"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="invoice_payment_method"
+                        value={m}
+                        checked={active}
+                        onChange={() => setPaymentMethod(m)}
+                        className="sr-only"
+                      />
+                      {labels[m]}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-xs text-ink-faint">
+                {paymentMethod === "bank_transfer" && "Clients see your bank details on every invoice. Add them in the next step."}
+                {paymentMethod === "stripe" && "Clients get a Stripe payment link. Bank details optional."}
+                {paymentMethod === "both" && "Clients can pay by bank transfer or card — you get both on every invoice."}
+              </p>
+            </div>
             <button type="submit" disabled={loading} className={btnCls}>
               {loading ? "Saving…" : "Continue →"}
             </button>
@@ -314,8 +348,13 @@ export default function OnboardingPage() {
             </div>
 
             <p className="text-xs font-semibold uppercase tracking-widest text-ink-faint pt-2">
-              Bank details (optional)
+              Bank details {paymentMethod === "stripe" ? "(optional)" : "(required for transfer payments)"}
             </p>
+            {(paymentMethod === "bank_transfer" || paymentMethod === "both") && (
+              <p className="text-xs text-brand-ink bg-brand-soft rounded-lg px-3 py-2">
+                These appear on every invoice and in the payment message your client receives in chat.
+              </p>
+            )}
             {countryFormat.bankFields.map((field) => (
               <div key={field.key}>
                 <label className={labelCls}>{field.label}</label>
