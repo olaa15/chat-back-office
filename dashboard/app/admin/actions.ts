@@ -9,6 +9,8 @@ async function requireAdmin() {
   if (!user || user.email !== process.env.ADMIN_EMAIL) {
     throw new Error('Unauthorized')
   }
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  if (aal?.currentLevel !== 'aal2') throw new Error('MFA required')
   return user
 }
 
